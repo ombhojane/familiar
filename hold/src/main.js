@@ -1,19 +1,36 @@
-const { app, globalShortcut, Tray, BrowserWindow, screen, nativeImage, shell } = require("electron");
+const { app, globalShortcut, Tray, Menu, BrowserWindow, screen, nativeImage, shell, Notification } = require("electron");
 const { join } = require("node:path");
 const { capture } = require("./capture.js");
 
 const SERVER = process.env.FAMILIAR_SERVER ?? "http://localhost:3333";
-const HOTKEY = process.env.HOLD_HOTKEY ?? "CommandOrControl+Shift+Space";
+const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? "http://localhost:5173";
 
-let tray = null;
-let hud = null;
+/**
+ * Hotkey candidates, most-preferred first.
+ * ⌘⇧Space is NOT usable: macOS binds it to input-source / Character Viewer, and it
+ * swallows the key before Electron sees it — register() still returns true, so the
+ * app looks healthy while doing nothing. These are all outside macOS's default map.
+ */
+const HOTKEYS = [
+  process.env.HOLD_HOTKEY,
+  "Control+Alt+Command+H",   // ⌃⌥⌘H — "hold"
+  "Control+Alt+Command+K",
+  "Control+Shift+Alt+H",
+  "F13",
+].filter(Boolean);
 
-/** A small, borderless toast. It must confirm instantly — the user is already leaving. */
+let tray = null, hud = null, activeKey = null, lastHeld = null;
+
+const pretty = (k) => k
+  .replace("CommandOrControl", "⌘").replace("Command", "⌘")
+  .replace("Control", "⌃").replace("Alt", "⌥").replace("Shift", "⇧")
+  .replace(/\+/g, "");
+
 function showHud(text, tone = "ok") {
   const { width } = screen.getPrimaryDisplay().workAreaSize;
   if (!hud) {
     hud = new BrowserWindow({
-      width: 260, height: 64, x: Math.round(width / 2 - 130), y: 48,
+      width: 280, height: 68, x: Math.round(width / 2 - 140), y: 52,
       frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
       resizable: false, movable: false, focusable: false, hasShadow: false,
       webPreferences: { nodeIntegration: false, contextIsolation: true },
@@ -21,21 +38,19 @@ function showHud(text, tone = "ok") {
     hud.setIgnoreMouseEvents(true);
     hud.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   }
-  const color = tone === "ok" ? "#18181B" : "#B42318";
+  const accent = tone === "ok" ? "#155BD0" : "#B42318";
   hud.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(`
     <style>
-      :root { color-scheme: light; }
-      body { margin:0; font:500 14px/1.3 Inter,-apple-system,system-ui,sans-serif;
-             display:flex; align-items:center; gap:10px; height:64px; padding:0 18px;
-             background:#FFFFFF; border:1px solid #E4E4E7; border-radius:10px;
-             box-shadow:0 8px 24px rgba(0,0,0,.10); color:${color}; }
-      .dot { width:8px; height:8px; border-radius:999px; background:${tone === "ok" ? "#155BD0" : "#B42318"}; flex:0 0 auto; }
+      body { margin:0; font:500 14px/1.35 Inter,-apple-system,system-ui,sans-serif;
+             display:flex; align-items:center; gap:11px; height:68px; padding:0 18px;
+             background:#fff; border:1px solid #E4E4E7; border-radius:12px;
+             box-shadow:0 10px 30px rgba(0,0,0,.12); color:#18181B; }
+      .d { width:9px; height:9px; border-radius:999px; background:${accent}; flex:0 0 auto; }
       .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    </style>
-    <div class="dot"></div><div class="t">${text}</div>`));
+    </style><div class="d"></div><div class="t">${text}</div>`));
   hud.showInactive();
   clearTimeout(showHud._t);
-  showHud._t = setTimeout(() => hud && hud.hide(), 1800);
+  showHud._t = setTimeout(() => hud && hud.hide(), 1900);
 }
 
 async function hold() {
@@ -43,35 +58,59 @@ async function hold() {
     showHud("holding your place…");
     const payload = await capture();
     const res = await fetch(`${SERVER}/capture`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`server ${res.status}`);
     const { captureId } = await res.json();
+    lastHeld = { at: new Date(), app: payload.app, id: captureId };
     showHud(`held · ${payload.app || "screen"}`);
-    console.log("captured", captureId, payload.app, payload.url ?? "");
+    buildMenu();
+    console.log("held", captureId, payload.app, payload.url ?? "");
   } catch (err) {
-    showHud("couldn't hold that", "err");
+    showHud(String(err.message || err).includes("fetch") ? "familiar server not running" : "couldn't hold that", "err");
     console.error(err);
   }
+}
+
+function buildMenu() {
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: activeKey ? `Hold my place    ${pretty(activeKey)}` : "Hold my place (no hotkey)", click: hold },
+    { type: "separator" },
+    { label: lastHeld ? `Last held: ${lastHeld.app} · ${lastHeld.at.toLocaleTimeString()}` : "Nothing held yet", enabled: false },
+    { label: activeKey ? `Hotkey: ${pretty(activeKey)}` : "⚠ No hotkey could be registered", enabled: false },
+    { type: "separator" },
+    { label: "Open dashboard", click: () => shell.openExternal(DASHBOARD) },
+    { type: "separator" },
+    { label: "Quit Familiar", role: "quit" },
+  ]));
 }
 
 app.whenReady().then(() => {
   if (process.platform === "darwin") app.dock?.hide();
 
-  const icon = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAAWklEQVR4Ae3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvwZBQAABt+9pAgAAAABJRU5ErkJggg=="
-  );
+  const icon = nativeImage.createFromPath(join(__dirname, "..", "assets", "trayTemplate.png"));
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip(`Familiar — ${HOTKEY} to hold your place`);
-  tray.on("click", () => shell.openExternal("http://localhost:5173"));
 
-  if (!globalShortcut.register(HOTKEY, hold)) {
-    console.error(`Could not register ${HOTKEY} — another app may own it.`);
+  for (const key of HOTKEYS) {
+    // register() can return true for a combo macOS already owns, so prefer combos
+    // outside its default map rather than trusting the return value alone.
+    if (globalShortcut.register(key, hold) && globalShortcut.isRegistered(key)) { activeKey = key; break; }
+  }
+
+  tray.setToolTip(activeKey ? `Familiar — ${pretty(activeKey)} to hold your place` : "Familiar — no hotkey registered");
+  buildMenu();
+
+  if (activeKey) {
+    console.log(`HOLD ready.  ${pretty(activeKey)}  (${activeKey})  →  ${SERVER}/capture`);
+    new Notification({
+      title: "Familiar is listening",
+      body: `Press ${pretty(activeKey)} anywhere to hold your place.`,
+      silent: true,
+    }).show();
   } else {
-    console.log(`HOLD ready. ${HOTKEY} captures the active window → ${SERVER}/capture`);
+    console.error("No hotkey could be registered. Use the menu-bar item to hold manually.");
   }
 });
 
