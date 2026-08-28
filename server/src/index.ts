@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./mcp.js";
 import { db, now, id } from "./db.js";
+import { recordDecision, evaluatePromotion, patchSessionPolicy, gatedTools, syncAgentPolicy } from "./control.js";
 
 const PORT = Number(process.env.PORT ?? 3333);
 const CAPTURE_DIR = resolve(process.env.CAPTURE_DIR ?? "./captures");
@@ -43,6 +44,59 @@ app.post("/capture", (req, res) => {
   res.json({ ok: true, captureId: cid });
 });
 
+/**
+ * The control plane sits IN the approval path. The UI sends its decision here, not
+ * straight to TrueForge, so every approve/deny is recorded, clearance is recomputed,
+ * and promotion rewrites the agent's own policy before the decision is forwarded.
+ */
+app.post("/api/decision", async (req, res) => {
+  const { sessionId, toolCallId, toolName, decision, reason, args, threadId } = req.body ?? {};
+  if (!sessionId || !toolCallId || !decision) {
+    return res.status(400).json({ error: "sessionId, toolCallId and decision are required" });
+  }
+
+  const cls = recordDecision(toolName, decision, reason ?? null, args);
+  const promotion = cls && decision === "approved" ? evaluatePromotion(cls) : null;
+
+  let patched = null;
+  if (promotion?.promoted) patched = await patchSessionPolicy(sessionId);
+
+  // Forward the decision to TrueForge to resume the halted turn.
+  const tf = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
+  const approval = decision === "approved"
+    ? { status: "allow" }
+    : { status: "deny", reason: reason ?? "denied" };
+  const upstream = await fetch(`${tf}/api/v1/sessions/${sessionId}/turns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input: [{ type: "user.tool_approval",
+      thread_id: threadId ?? "main", tool_call_id: toolCallId, approval }] }),
+  });
+  // Drain the resumed turn's stream so the caller knows it actually finished.
+  // Without this the session is still running and the next turn is rejected 422.
+  const resumed = await upstream.text();
+  const halted = resumed.includes("tool.approval_required") || resumed.includes("tool.response_required");
+
+  res.json({
+    recorded: cls ?? toolName,
+    promotion,
+    patched,
+    gatedNow: gatedTools(),
+    upstream: upstream.status,
+    resumedTurnHalted: halted,
+  });
+});
+
+app.post("/api/seed_order", (req, res) => {
+  const { rule, rationale, scope } = req.body ?? {};
+  const oid = id("order");
+  db.prepare(`INSERT INTO standing_orders (id,rule,rationale,scope,proposed_at,ratified_at,enforced_by)
+              VALUES (?,?,?,?,?,?,'familiar')`).run(oid, rule, rationale, scope, now(), now());
+  res.json({ orderId: oid });
+});
+
+app.get("/api/gated", (_q, r) => r.json({ gated: gatedTools() }));
+
 // ---- Read models for the web UI ----
 app.get("/api/loops", (_q, r) => r.json(db.prepare(`SELECT * FROM loops ORDER BY created_at DESC`).all()));
 app.get("/api/clearance", (_q, r) => r.json(db.prepare(`SELECT * FROM clearance ORDER BY action_class`).all()));
@@ -52,7 +106,9 @@ app.get("/api/receipts", (_q, r) => r.json(db.prepare(`SELECT * FROM receipts OR
 app.get("/api/captures", (_q, r) => r.json(db.prepare(`SELECT id,at,app,window_title,url,status FROM captures ORDER BY at DESC`).all()));
 app.get("/health", (_q, r) => r.json({ ok: true }));
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`familiar-mcp  →  http://localhost:${PORT}/mcp`);
   console.log(`captures      →  ${CAPTURE_DIR}`);
+  const sync = await syncAgentPolicy();
+  console.log(`policy sync   →  ${JSON.stringify(sync)}`);
 });

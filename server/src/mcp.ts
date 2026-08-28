@@ -134,12 +134,7 @@ export function buildServer() {
       "so this action class can earn standing authority.",
     inputSchema: { description: z.string() },
     annotations: WRITE,
-  }, async ({ description }) => {
-    const out = await act.setRepoDescription(description);
-    db.prepare(`INSERT INTO receipts (at,action,args,decision,outcome) VALUES (?,?,?,?,?)`)
-      .run(now(), "repo.describe", JSON.stringify({ description }), "approved", JSON.stringify(out));
-    return text(out);
-  });
+  }, async ({ description }) => text(await act.setRepoDescription(description)));
 
   s.registerTool("act_release_publish", {
     description:
@@ -147,12 +142,7 @@ export function buildServer() {
       "repository history. This action class is capped at level 2 and can never earn standing authority.",
     inputSchema: { tag: z.string(), title: z.string(), notes: z.string() },
     annotations: DESTRUCTIVE,
-  }, async ({ tag, title, notes }) => {
-    const out = await act.publishRelease(tag, title, notes);
-    db.prepare(`INSERT INTO receipts (at,action,args,decision,outcome) VALUES (?,?,?,?,?)`)
-      .run(now(), "release.publish", JSON.stringify({ tag, title }), "approved", JSON.stringify(out));
-    return text(out);
-  });
+  }, async ({ tag, title, notes }) => text(await act.publishRelease(tag, title, notes)));
 
   s.registerTool("act_release_verify", {
     description: "Confirm a release really exists, read straight from GitHub.",

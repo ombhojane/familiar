@@ -5,10 +5,18 @@ import json, sys, urllib.request
 
 TF = "http://localhost:8790"
 
-def post(path, body):
-    req = urllib.request.Request(TF + path, data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json"})
-    return urllib.request.urlopen(req, timeout=300).read().decode()
+def post(path, body, retries=8):
+    """422 means the session is still finalizing the previous turn. Back off and retry."""
+    import time
+    for attempt in range(retries):
+        req = urllib.request.Request(TF + path, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            return urllib.request.urlopen(req, timeout=300).read().decode()
+        except urllib.error.HTTPError as e:
+            if e.code == 422 and attempt < retries - 1:
+                time.sleep(1.5 * (attempt + 1)); continue
+            raise
 
 def events(raw):
     out = []
@@ -56,6 +64,24 @@ def report(evs):
             print("  ❓ QUESTION")
             return "question", e["tool_calls"][0]["id"]
     return "done", None
+
+FAM = "http://localhost:3333"
+
+def decide(sid, tcid, tool_name, decision, reason=None):
+    """Route the decision through the control plane, not straight to TrueForge.
+    It records the receipt, recomputes clearance, PATCHes policy on promotion,
+    then forwards to TrueForge to resume the halted turn."""
+    req = urllib.request.Request(FAM + "/api/decision",
+        data=json.dumps({"sessionId": sid, "toolCallId": tcid, "toolName": tool_name,
+                         "decision": decision, "reason": reason}).encode(),
+        headers={"Content-Type": "application/json"})
+    out = json.loads(urllib.request.urlopen(req, timeout=300).read().decode())
+    p = out.get("promotion")
+    if p:
+        print(f"     clearance: {p['why']}" + ("  🏆 PROMOTED" if p["promoted"] else ""))
+    if out.get("patched"):
+        print(f"     🏆 PATCHED session policy -> gated now: {out['patched']['gated']}")
+    return out
 
 def allow(sid, tcid):
     return turn(sid, [{"type": "user.tool_approval", "thread_id": "main",
