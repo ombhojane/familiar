@@ -19,7 +19,7 @@ const HOTKEYS = [
   "F13",
 ].filter(Boolean);
 
-let tray = null, hud = null, activeKey = null, lastHeld = null;
+let tray = null, hud = null, win = null, activeKey = null, lastHeld = null;
 
 const pretty = (k) => k
   .replace("CommandOrControl", "⌘").replace("Command", "⌘")
@@ -73,6 +73,23 @@ async function hold() {
   }
 }
 
+/** The real window. The dashboard is the desktop app's own surface, not a browser tab. */
+function openWindow() {
+  if (win && !win.isDestroyed()) { win.show(); win.focus(); return; }
+  win = new BrowserWindow({
+    width: 1240, height: 820, minWidth: 940, minHeight: 620,
+    title: "Familiar",
+    titleBarStyle: "hiddenInset",           // native traffic lights, no chrome bar
+    trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: "#FFFFFF",
+    show: false,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+  win.loadURL(DASHBOARD);
+  win.once("ready-to-show", () => { win.show(); win.focus(); });
+  win.on("closed", () => { win = null; });
+}
+
 function buildMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: activeKey ? `Hold my place    ${pretty(activeKey)}` : "Hold my place (no hotkey)", click: hold },
@@ -80,7 +97,8 @@ function buildMenu() {
     { label: lastHeld ? `Last held: ${lastHeld.app} · ${lastHeld.at.toLocaleTimeString()}` : "Nothing held yet", enabled: false },
     { label: activeKey ? `Hotkey: ${pretty(activeKey)}` : "⚠ No hotkey could be registered", enabled: false },
     { type: "separator" },
-    { label: "Open dashboard", click: () => shell.openExternal(DASHBOARD) },
+    { label: "Open Familiar", accelerator: "Command+O", click: openWindow },
+    { label: "Open in browser", click: () => shell.openExternal(DASHBOARD) },
     { type: "separator" },
     { label: "Quit Familiar", role: "quit" },
   ]));
@@ -101,6 +119,8 @@ app.whenReady().then(() => {
 
   tray.setToolTip(activeKey ? `Familiar — ${pretty(activeKey)} to hold your place` : "Familiar — no hotkey registered");
   buildMenu();
+  tray.on("double-click", openWindow);
+  openWindow();
 
   if (activeKey) {
     console.log(`HOLD ready.  ${pretty(activeKey)}  (${activeKey})  →  ${SERVER}/capture`);
@@ -114,5 +134,7 @@ app.whenReady().then(() => {
   }
 });
 
+app.on("activate", openWindow);
 app.on("will-quit", () => globalShortcut.unregisterAll());
+// Closing the window must not quit: Familiar keeps listening for the hotkey.
 app.on("window-all-closed", () => {});

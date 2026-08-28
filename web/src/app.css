@@ -154,3 +154,18 @@
   border-radius: var(--r-md); padding: var(--s3) var(--s4);
   box-shadow: 0 8px 24px rgba(0,0,0,.12); font-size: 13px; z-index: 60;
 }
+
+/* ---- running inside the desktop app ---- */
+/* hiddenInset keeps the native traffic lights, so the content has to clear them,
+   and the strip they sit in has to be draggable or the window can't be moved. */
+.shell.desktop { padding-top: 38px; }
+.titlebar {
+  position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 40;
+  background: var(--surface-base);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+.shell.desktop .rail,
+.shell.desktop .stage { height: calc(100dvh - 38px); }
+/* controls inside a draggable region stop responding unless excluded */
+button, input, textarea, a { -webkit-app-region: no-drag; }

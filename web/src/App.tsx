@@ -76,8 +76,11 @@ export function App() {
   const onAnswer = (text: string) =>
     run(async () => answer(sid.current!, pending!, text));
 
+  const desktop = typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent);
+
   return (
-    <div className="shell">
+    <div className={desktop ? "shell desktop" : "shell"}>
+      {desktop && <div className="titlebar" />}
       <MissionBoard loops={loops} pending={unprocessed} />
       <Stage
         state={state} clearance={top} loops={loops} receipts={receipts}
