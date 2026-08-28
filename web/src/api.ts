@@ -1,0 +1,24 @@
+export type Loop = {
+  id: string; title: string; kind: string; status: string;
+  summary: string | null; missing: string; deadline: string | null;
+  capture_id: string | null; created_at: string;
+};
+export type Clearance = {
+  action_class: string; level: number; reversible: number;
+  approvals: number; denials: number; demote_reason: string | null;
+};
+export type Order = { id: string; rule: string; rationale: string; scope: string; ratified_at: string | null };
+export type Fact = { key: string; value: string; source: string | null; learned_at: string };
+export type Receipt = { id: number; at: string; action: string; decision: string; reason: string | null };
+export type Capture = { id: string; at: string; app: string | null; window_title: string | null; url: string | null; status: string };
+
+const j = <T,>(p: string) => fetch(p).then((r) => r.json() as Promise<T>);
+
+export const getLoops     = () => j<Loop[]>("/api/loops");
+export const getClearance = () => j<Clearance[]>("/api/clearance");
+export const getOrders    = () => j<Order[]>("/api/orders");
+export const getDossier   = () => j<Fact[]>("/api/dossier");
+export const getReceipts  = () => j<Receipt[]>("/api/receipts");
+export const getCaptures  = () => j<Capture[]>("/api/captures");
+
+export const LEVELS = ["Observe", "Prepare", "Act with approval", "Standing authority"];
