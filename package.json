@@ -1,0 +1,11 @@
+{
+  "name": "familiar",
+  "private": true,
+  "type": "module",
+  "workspaces": ["server", "web", "hold"],
+  "scripts": {
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "dev:hold": "npm --workspace hold run dev"
+  }
+}
