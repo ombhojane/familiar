@@ -9,6 +9,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { buildServer } from "./mcp.js";
 import { db, now, id } from "./db.js";
 import { recordDecision, evaluatePromotion, patchSessionPolicy, gatedTools, syncAgentPolicy } from "./control.js";
+import { startIngest, drain } from "./ingest.js";
 
 const PORT = Number(process.env.PORT ?? 3333);
 const CAPTURE_DIR = resolve(process.env.CAPTURE_DIR ?? "./captures");
@@ -42,6 +43,7 @@ app.post("/capture", (req, res) => {
   ).run(cid, now(), appName ?? null, windowTitle ?? null, url ?? null, imagePath);
 
   res.json({ ok: true, captureId: cid });
+  void drain();   // pick it up immediately rather than waiting for the next tick
 });
 
 /**
@@ -110,4 +112,5 @@ app.listen(PORT, async () => {
   console.log(`captures      →  ${CAPTURE_DIR}`);
   const sync = await syncAgentPolicy();
   console.log(`policy sync   →  ${JSON.stringify(sync)}`);
+  startIngest();
 });
