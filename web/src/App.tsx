@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Familiar, type CreatureState } from "./Familiar";
 import {
   getLoops, getClearance, getOrders, getDossier, getReceipts, getCaptures,
   LEVELS, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture,
 } from "./api";
+import { Gate } from "./Gate";
+import { newSession, say, answer, decide, digestRaw, type Pending, type TurnResult } from "./session";
 import "./app.css";
 
 const useLive = <T,>(fn: () => Promise<T>, initial: T, ms = 2000) => {
@@ -25,16 +27,68 @@ export function App() {
   const dossier = useLive<Fact[]>(getDossier, []);
   const receipts = useLive<Receipt[]>(getReceipts, []);
   const captures = useLive<Capture[]>(getCaptures, []);
-  const [state] = useState<CreatureState>("idle");
+
+  const [state, setState] = useState<CreatureState>("idle");
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const sid = useRef<string | null>(null);
 
   const top = Math.max(0, ...clearance.map((c) => c.level));
   const unprocessed = captures.filter((c) => c.status === "unprocessed").length;
 
+  const ensure = async () => (sid.current ??= await newSession());
+
+  const apply = (r: TurnResult) => {
+    if (r.said) setSaid(r.said);
+    setPending(r.pending);
+    setState(r.pending ? "asking" : "idle");
+  };
+
+  const run = async (fn: () => Promise<TurnResult>, working: CreatureState = "preparing") => {
+    setBusy(true); setState(working);
+    try { apply(await fn()); }
+    catch (e) { setSaid(String(e)); setState("idle"); }
+    finally { setBusy(false); }
+  };
+
+  const send = (text: string) => run(async () => say(await ensure(), text), "sweeping");
+
+  const onDecide = async (d: "approved" | "denied", reason?: string) => {
+    if (!pending) return;
+    setBusy(true);
+    setState(d === "approved" ? "approved" : "denied");
+    try {
+      const out = await decide(sid.current!, pending, d, reason);
+      if (out.promotion?.promoted) setToast(`Standing authority earned — ${out.promotion.why}`);
+      // The resumed turn may itself stop at another gate (e.g. ratifying a new rule).
+      // Read it from the stream the control plane already has; do not send a new message.
+      apply(digestRaw(out.resumed ?? ""));
+    } catch (e) {
+      setSaid(String(e));
+    } finally {
+      setBusy(false);
+      setTimeout(() => setToast(null), 6000);
+    }
+  };
+
+  const onAnswer = (text: string) =>
+    run(async () => answer(sid.current!, pending!, text));
+
   return (
     <div className="shell">
       <MissionBoard loops={loops} pending={unprocessed} />
-      <Stage state={state} clearance={top} loops={loops} receipts={receipts} />
+      <Stage
+        state={state} clearance={top} loops={loops} receipts={receipts}
+        said={said} busy={busy} onSend={send}
+        onRead={unprocessed > 0 ? () => send("A capture arrived from HOLD. Read it and put it on the mission board.") : null}
+      />
       <Knows clearance={clearance} orders={orders} dossier={dossier} />
+      {pending && (
+        <Gate key={pending.toolCallId} pending={pending} onDecide={onDecide} onAnswer={onAnswer} busy={busy} />
+      )}
+      {toast && <div className="toast">🏆 {toast}</div>}
     </div>
   );
 }
@@ -82,17 +136,39 @@ function MissionBoard({ loops, pending }: { loops: Loop[]; pending: number }) {
 }
 
 function Stage({
-  state, clearance, loops, receipts,
-}: { state: CreatureState; clearance: number; loops: Loop[]; receipts: Receipt[] }) {
+  state, clearance, loops, receipts, said, busy, onSend, onRead,
+}: {
+  state: CreatureState; clearance: number; loops: Loop[]; receipts: Receipt[];
+  said: string; busy: boolean; onSend: (t: string) => void; onRead: (() => void) | null;
+}) {
+  const [draft, setDraft] = useState("");
   const ready = loops.filter((l) => l.status === "prepared").length;
+
   return (
     <main className="stage">
       <div className="creature">
         <Familiar state={state} clearance={clearance} size={120} />
         <p className="creature-line">
-          {ready > 0 ? `${ready} ready for you.` : "Nothing needs you right now."}
+          {said || (ready > 0 ? `${ready} ready for you.` : "Nothing needs you right now.")}
         </p>
+        {onRead && !busy && (
+          <button className="primary" onClick={onRead}>Read what I held</button>
+        )}
       </div>
+
+      <form
+        className="composer"
+        onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { onSend(draft); setDraft(""); } }}
+      >
+        <input
+          value={draft} onChange={(e) => setDraft(e.target.value)} disabled={busy}
+          placeholder="Ask it to do something…" aria-label="Message your Familiar"
+        />
+        <button className="primary" type="submit" disabled={busy || !draft.trim()}>
+          {busy ? "…" : "Send"}
+        </button>
+      </form>
+
       <section className="ledger">
         <header className="rail-head"><h2>Receipts</h2><span className="count num">{receipts.length}</span></header>
         {receipts.length === 0 && <p className="empty">Every decision leaves a receipt.</p>}

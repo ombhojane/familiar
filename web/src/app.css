@@ -95,3 +95,62 @@
 .rule { font-size: 13px; font-weight: 500; }
 .fact-top { display: flex; justify-content: space-between; gap: var(--s2); font-size: 13px; }
 .fact-top .mono { font-size: 12px; color: var(--text-tertiary); }
+
+/* ---- the gate: the only surface that ever takes the whole screen ---- */
+@keyframes scrim-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes gate-in { from { opacity: 0; transform: scale(.97) } to { opacity: 1; transform: none } }
+
+.scrim {
+  position: fixed; inset: 0; z-index: 50;
+  animation: scrim-in 160ms ease-out both;
+  background: rgba(24, 24, 27, .28);
+  backdrop-filter: blur(2px);
+  display: grid; place-items: center; padding: var(--s5);
+}
+.gate {
+  animation: gate-in 200ms ease-out both;
+  width: min(520px, 100%);
+  background: var(--surface-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 16px 48px rgba(0,0,0,.16);
+  padding: var(--s5);
+}
+.gate h2 { font-size: 18px; margin-bottom: var(--s3); }
+.warn-line { color: var(--warn); font-size: 12px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; margin-bottom: var(--s2); }
+
+.args { margin: 0 0 var(--s4); border-top: 1px solid var(--border); }
+.args > div { display: flex; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
+.args dt { flex: 0 0 132px; font-size: 12px; color: var(--text-tertiary); }
+.args dd { margin: 0; font-size: 13px; word-break: break-word; }
+
+.undo { font-size: 13px; margin-bottom: var(--s4); }
+.undo-label { color: var(--text-tertiary); }
+.undo .no { color: var(--danger); }
+.undo .yes { color: var(--ok); }
+
+.reason-label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: var(--s2); }
+.reply {
+  width: 100%; font: inherit; font-size: 13px; padding: var(--s2) var(--s3);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-base); color: var(--text-primary); resize: vertical;
+}
+.reply:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.gate-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s4); }
+
+.composer { display: flex; gap: var(--s2); }
+.composer input {
+  flex: 1; font: inherit; font-size: 14px; padding: var(--s3);
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-base);
+}
+.composer input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.composer input:disabled { opacity: .5; cursor: not-allowed; }
+
+.toast {
+  position: fixed; left: 50%; bottom: var(--s5); transform: translateX(-50%);
+  background: var(--surface-base); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s3) var(--s4);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); font-size: 13px; z-index: 60;
+}

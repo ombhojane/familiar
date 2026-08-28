@@ -75,7 +75,6 @@ app.post("/api/decision", async (req, res) => {
   // Drain the resumed turn's stream so the caller knows it actually finished.
   // Without this the session is still running and the next turn is rejected 422.
   const resumed = await upstream.text();
-  const halted = resumed.includes("tool.approval_required") || resumed.includes("tool.response_required");
 
   res.json({
     recorded: cls ?? toolName,
@@ -83,7 +82,7 @@ app.post("/api/decision", async (req, res) => {
     patched,
     gatedNow: gatedTools(),
     upstream: upstream.status,
-    resumedTurnHalted: halted,
+    resumed,   // raw SSE of the resumed turn; the UI digests it to find the next gate
   });
 });
 
