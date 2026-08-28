@@ -13,7 +13,7 @@ const model = () => process.env.PERCEPTION_MODEL ?? "gpt-5.6-luna";
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["what_it_is", "kind", "fields_filled", "fields_missing", "deadline", "next_step", "confidence"],
+  required: ["what_it_is", "kind", "fields_filled", "fields_missing", "deadline", "next_step", "stakes", "effort_minutes", "confidence"],
   properties: {
     what_it_is: { type: "string", description: "Concrete name of the thing on screen, e.g. 'NSF grant application, section 3 of 7'" },
     kind: { type: "string", enum: ["form", "reply", "intention", "renewal", "promise", "other"] },
@@ -21,6 +21,9 @@ const SCHEMA = {
     fields_missing: { type: "array", items: { type: "string" } },
     deadline: { type: ["string", "null"], description: "ISO date ONLY if a due date is literally printed on the page. Otherwise null." },
     next_step: { type: "string", description: "The single next action needed to move this forward." },
+    stakes: { type: "string", enum: ["official", "money", "work", "social", "personal", "none"],
+      description: "What kind of consequence this carries, judged ONLY from what is visible: official/government form, money involved, work obligation, another person waiting, personal task, or none." },
+    effort_minutes: { type: "integer", description: "Honest estimate of minutes needed to finish what remains, from what is visible." },
     confidence: { type: "number" },
   },
 } as const;
@@ -49,6 +52,8 @@ export type Extraction = {
   fields_missing: string[];
   deadline: string | null;
   next_step: string;
+  stakes: string;
+  effort_minutes: number;
   confidence: number;
 };
 

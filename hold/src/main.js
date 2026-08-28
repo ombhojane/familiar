@@ -134,6 +134,50 @@ app.whenReady().then(() => {
   }
 });
 
+/**
+ * The proactive layer — with a zero-annoyance budget. Exactly two triggers:
+ *   1. a loop BECOMES prepared (work finished on your behalf — worth one ping)
+ *   2. a prepared loop's deadline is within 72h (once per loop, ever)
+ * Never on staleness. Never repeats. The board shows ready, never late.
+ */
+const seenPrepared = new Set();
+const warnedDeadline = new Set();
+let firstPoll = true;
+
+async function pollLoops() {
+  try {
+    const res = await fetch(`${SERVER}/api/loops`);
+    if (!res.ok) return;
+    const loops = await res.json();
+    for (const l of loops) {
+      if (l.status === "prepared" && !seenPrepared.has(l.id)) {
+        seenPrepared.add(l.id);
+        if (!firstPoll) {
+          new Notification({
+            title: "Ready for you",
+            body: `${l.title} — prepared. One tap to finish.`,
+            silent: true,
+          }).on("click", openWindow).show();
+        }
+      }
+      if (l.deadline && l.status === "prepared" && !warnedDeadline.has(l.id)) {
+        const days = (new Date(l.deadline) - Date.now()) / 86400000;
+        if (days >= 0 && days <= 3) {
+          warnedDeadline.add(l.id);
+          new Notification({
+            title: `Due in ${Math.max(1, Math.ceil(days))} day${days > 1 ? "s" : ""}`,
+            body: `${l.title} is prepared and waiting.`,
+            silent: false,
+          }).on("click", openWindow).show();
+        }
+      }
+    }
+    firstPoll = false;
+  } catch {}
+}
+setInterval(pollLoops, 30000);
+pollLoops();
+
 app.on("activate", openWindow);
 app.on("will-quit", () => globalShortcut.unregisterAll());
 // Closing the window must not quit: Familiar keeps listening for the hotkey.

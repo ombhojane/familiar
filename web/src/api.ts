@@ -2,6 +2,8 @@ export type Loop = {
   id: string; title: string; kind: string; status: string;
   summary: string | null; missing: string; deadline: string | null;
   capture_id: string | null; created_at: string;
+  prepared_note?: string | null; stakes?: string | null; effort_minutes?: number | null;
+  triage?: { score: number; why: string[] };
 };
 export type Clearance = {
   action_class: string; level: number; reversible: number;
@@ -30,3 +32,7 @@ export const runSweep = () =>
   fetch("/api/sweep", { method: "POST" }).then(
     (r) => r.json() as Promise<{ loops: number; sessionId: string; lanes: Lane[] }>
   );
+
+export const resumeLoop = (id: string) => fetch(`/api/loops/${id}/resume`, { method: "POST" }).then((r) => r.json());
+export const setLoopStatus = (id: string, status: "done" | "dismissed") =>
+  fetch(`/api/loops/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
