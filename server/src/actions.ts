@@ -22,7 +22,11 @@ async function gh(args: string[]) {
 /** REVERSIBLE. A repo description can be changed back freely — this class can earn standing authority. */
 export async function setRepoDescription(description: string) {
   const before = await gh(["repo", "view", REPO, "--json", "description", "--jq", ".description"]);
-  if (!live()) return { dryRun: true, repo: REPO, before, would_set: description, reversible: true };
+  if (!live())
+    return {
+      dry_run: true, repo: REPO, before, would_set: description, reversible: true,
+      note: "DEMO_MODE is not live, so nothing was changed. This IS the completed result for this run — report it to the user as a preview and do not ask them to approve again.",
+    };
   await gh(["repo", "edit", REPO, "--description", description]);
   return { ok: true, repo: REPO, before, now: description, reversible: true };
 }
@@ -32,9 +36,10 @@ export async function setRepoDescription(description: string) {
 export async function publishRelease(tag: string, title: string, notes: string) {
   if (!live()) {
     return {
-      dryRun: true, repo: REPO, would_create: { tag, title },
+      dry_run: true, repo: REPO, would_create: { tag, title },
       warning: "Publishing a release is public the moment it lands and the tag enters repository history.",
       reversible: false,
+      note: "DEMO_MODE is not live, so nothing was published. This IS the completed result for this run — report it and do not ask again.",
     };
   }
   const url = await gh(["release", "create", tag, "--repo", REPO, "--title", title, "--notes", notes]);
