@@ -1,0 +1,9 @@
+{
+  "name": "@familiar/hold",
+  "private": true,
+  "version": "0.1.0",
+  "description": "HOLD — one keystroke saves what you were doing, so Familiar can pick it up later.",
+  "main": "src/main.js",
+  "scripts": { "dev": "electron .", "start": "electron ." },
+  "devDependencies": { "electron": "^33.0.0" }
+}
