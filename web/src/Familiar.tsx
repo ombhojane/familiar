@@ -88,7 +88,9 @@ export function Familiar({
       }}
       style={{ overflow: "visible" }}
     >
-      <motion.ellipse cx="48" cy="54" rx="29" ry="27" animate={{ fill }} />
+      <motion.ellipse cx="48" cy="54" rx="29" ry="27" fill={fill}
+        initial={false} animate={{ fill }}
+        transition={{ duration: 0.3, ease: "easeOut" }} />
       {/* secondary action: a wisp that lags the body — cheap "expensive animation" signal */}
       <motion.circle
         cx="74" cy="24" r="4.5" fill={`hsl(${m.hue} 62% 78%)`}
@@ -110,9 +112,10 @@ export function Familiar({
             style={{ x: gx, y: gy }}
           />
           <motion.rect
-            x={cx - 7} width={14} height={2.6} rx={1.3} fill="#141020"
-            animate={{ y: 37 + m.brow * 0.22, rotate: cx === 36 ? m.brow * 0.35 : -m.brow * 0.35 }}
-            style={{ originX: `${cx}px`, originY: "38px" }}
+            x={cx - 7} y={37} width={14} height={2.6} rx={1.3} fill="#141020"
+            initial={false}
+            animate={{ y: m.brow * 0.22, rotate: cx === 36 ? m.brow * 0.35 : -m.brow * 0.35 }}
+            style={{ transformBox: "fill-box", transformOrigin: "center" }}
             transition={{ type: "spring", stiffness: 300, damping: 18 }}
           />
         </g>
