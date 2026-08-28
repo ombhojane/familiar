@@ -1,0 +1,89 @@
+/* Familiar design system.
+   Follows apple-ui-skills for structure, spacing, focus, states, motion discipline
+   and the >=4.5:1 contrast rule. Its color and type tokens are replaced: the shipped
+   ones fail their own contrast rule (#808080 on #FFFFFF is 3.5:1), use a bright blue
+   for "cards, modals", and set body text at 27px — landing-page values, not app UI. */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --surface-base:   #FFFFFF;
+  --surface-raised: #FAFAFA;
+  --surface-sunken: #F4F4F5;
+  --border:         #E4E4E7;
+  --border-strong:  #D4D4D8;
+
+  /* text — all >= 4.5:1 on --surface-base */
+  --text-primary:   #18181B;  /* 16.1:1 */
+  --text-secondary: #52525B;  /*  7.4:1 */
+  --text-tertiary:  #71717A;  /*  4.8:1 */
+
+  /* one accent, per the 10-color limit */
+  --accent:         #155BD0;  /*  6.5:1 */
+  --accent-soft:    #EFF4FD;
+
+  /* state */
+  --ok:     #15803D;
+  --warn:   #B45309;
+  --danger: #B42318;
+  --danger-soft: #FEF3F2;
+
+  /* 4px grid */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px;
+
+  --r-sm: 6px; --r-md: 10px; --r-pill: 999px;
+
+  --font: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100dvh; margin: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; }
+p { text-wrap: pretty; margin: 0; }
+
+/* numbers align in columns — receipts, counters, clearance levels */
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* focus: 2px outline, 2px offset, never removed */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface-base);
+  color: var(--text-primary);
+  border-radius: var(--r-sm);
+  padding: var(--s2) var(--s3);
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+button:hover:not(:disabled) { background: var(--surface-sunken); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { background: #1250BC; }
+button.danger { color: var(--danger); border-color: var(--border); }
+button.danger:hover:not(:disabled) { background: var(--danger-soft); }
+
+/* only transform and opacity are animated; never layout properties */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
