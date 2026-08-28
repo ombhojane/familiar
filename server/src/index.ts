@@ -10,6 +10,7 @@ import { buildServer } from "./mcp.js";
 import { db, now, id } from "./db.js";
 import { recordDecision, evaluatePromotion, patchSessionPolicy, gatedTools, syncAgentPolicy } from "./control.js";
 import { startIngest, drain } from "./ingest.js";
+import { startSweep, lanes } from "./sweep.js";
 
 const PORT = Number(process.env.PORT ?? 3333);
 const CAPTURE_DIR = resolve(process.env.CAPTURE_DIR ?? "./captures");
@@ -94,6 +95,15 @@ app.post("/api/seed_order", (req, res) => {
   db.prepare(`INSERT INTO standing_orders (id,rule,rationale,scope,proposed_at,ratified_at,enforced_by)
               VALUES (?,?,?,?,?,?,'familiar')`).run(oid, rule, rationale, scope, now(), now());
   res.json({ orderId: oid });
+});
+
+app.post("/api/sweep", async (_req, res) => {
+  try {
+    const out = await startSweep();
+    res.json({ loops: out.loops, sessionId: out.sessionId, lanes: lanes(out.raw) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 app.get("/api/gated", (_q, r) => r.json({ gated: gatedTools() }));

@@ -10,13 +10,34 @@ const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
 let workerSession: string | null = null;
 let running = false;
 
+const remember = (k: string, v: string) =>
+  db.prepare(`INSERT INTO harness_state (key,value,at) VALUES (?,?,?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value, at=excluded.at`).run(k, v, now());
+const recall = (k: string) =>
+  (db.prepare(`SELECT value FROM harness_state WHERE key=?`).get(k) as { value: string } | undefined)?.value ?? null;
+
+/** Sessions survive restarts, so reuse the one we had rather than starting over.
+ *  Verify it still exists first — TrueForge's store may have been reset underneath us. */
 async function session(): Promise<string> {
   if (workerSession) return workerSession;
+
+  const saved = recall("worker_session");
+  if (saved) {
+    const check = await fetch(`${TF}/api/v1/sessions/${saved}`);
+    if (check.ok) {
+      workerSession = saved;
+      console.log(`ingest        →  resumed session ${saved}`);
+      return saved;
+    }
+    console.log(`ingest        →  saved session ${saved} is gone; starting a new one`);
+  }
+
   const r = await fetch(`${TF}/api/v1/sessions`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ agent: { name: "familiar" } }),
   });
   workerSession = (await r.json()).data.id as string;
+  remember("worker_session", workerSession);
   return workerSession;
 }
 

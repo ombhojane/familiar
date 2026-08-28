@@ -22,3 +22,11 @@ export const getReceipts  = () => j<Receipt[]>("/api/receipts");
 export const getCaptures  = () => j<Capture[]>("/api/captures");
 
 export const LEVELS = ["Observe", "Prepare", "Act with approval", "Standing authority"];
+
+export type Lane = { threadId: string; name: string; done: boolean; output: string | null };
+
+/** One subagent per open loop, all at once. Returns when they are all back. */
+export const runSweep = () =>
+  fetch("/api/sweep", { method: "POST" }).then(
+    (r) => r.json() as Promise<{ loops: number; sessionId: string; lanes: Lane[] }>
+  );

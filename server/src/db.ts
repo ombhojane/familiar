@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS clearance (
   demote_reason TEXT
 );
 
+-- Durable key/value for the harness itself (e.g. which session to resume after a restart).
+CREATE TABLE IF NOT EXISTS harness_state (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  at    TEXT NOT NULL
+);
+
 -- APPEND-ONLY AUDIT. The collateral that makes the character legitimate.
 CREATE TABLE IF NOT EXISTS receipts (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,

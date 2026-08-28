@@ -169,3 +169,19 @@
 .shell.desktop .stage { height: calc(100dvh - 38px); }
 /* controls inside a draggable region stop responding unless excluded */
 button, input, textarea, a { -webkit-app-region: no-drag; }
+
+.stage-actions { display: flex; gap: var(--s2); }
+
+/* swimlanes: overlap is the whole message — parallel work, finishing at different times */
+.lanes {
+  background: var(--surface-base); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s4);
+}
+.lane { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s2) 0; }
+.lane-bar { flex: 0 0 84px; height: 6px; border-radius: var(--r-pill);
+  background: var(--surface-sunken); overflow: hidden; margin-top: 6px; }
+.lane-bar span { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent); }
+.lane.live .lane-bar span { width: 55%; opacity: .55; }
+.lane.done .lane-bar span { width: 100%; background: var(--ok); }
+.lane-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lane-name { font-size: 12px; }
