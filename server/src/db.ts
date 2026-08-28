@@ -106,5 +106,12 @@ for (const [cls, rev] of SEED) {
   ).run(cls, rev);
 }
 
+// Columns added after first ship — guarded so existing DBs upgrade in place.
+for (const ddl of [
+  `ALTER TABLE loops ADD COLUMN prepared_note TEXT`,
+  `ALTER TABLE loops ADD COLUMN stakes TEXT`,
+  `ALTER TABLE loops ADD COLUMN effort_minutes INTEGER`,
+]) { try { db.exec(ddl); } catch {} }
+
 export const now = () => new Date().toISOString();
 export const id = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;

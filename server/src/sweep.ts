@@ -47,8 +47,10 @@ and tell it exactly what to do:
   - work out precisely what closing that loop would take
   - do any safe preparation in the sandbox (drafting, filling, assembling)
   - do NOT send, submit, publish, or spend anything
-  - finish by calling loop_upsert with status "prepared" and a sharper list of what is
-    still missing
+  - finish by calling loop_upsert with status "prepared", a sharper list of what is
+    still missing, and — most importantly — put the FULL draft/checklist you produced
+    into preparedNote. The user reads preparedNote verbatim; work not written there
+    is lost.
 
 When they are all back, tell me in one line how many are prepared.`,
       }],

@@ -11,6 +11,8 @@ import { db, now, id } from "./db.js";
 import { recordDecision, evaluatePromotion, patchSessionPolicy, gatedTools, syncAgentPolicy } from "./control.js";
 import { startIngest, drain } from "./ingest.js";
 import { startSweep, lanes } from "./sweep.js";
+import { triage } from "./triage.js";
+import { execFile } from "node:child_process";
 
 const PORT = Number(process.env.PORT ?? 3333);
 const CAPTURE_DIR = resolve(process.env.CAPTURE_DIR ?? "./captures");
@@ -109,12 +111,77 @@ app.post("/api/sweep", async (_req, res) => {
 app.get("/api/gated", (_q, r) => r.json({ gated: gatedTools() }));
 
 // ---- Read models for the web UI ----
-app.get("/api/loops", (_q, r) => r.json(db.prepare(`SELECT * FROM loops ORDER BY created_at DESC`).all()));
+app.get("/api/loops", (_q, r) => {
+  const rows = db.prepare(`SELECT * FROM loops WHERE status NOT IN ('done','dismissed') ORDER BY created_at DESC`).all() as any[];
+  const scored = rows.map((l) => ({ ...l, triage: triage(l) }));
+  scored.sort((a, b) => b.triage.score - a.triage.score);
+  r.json(scored);
+});
+
+// The screenshot is the evidence. Serving it is what makes "here's what I saw" real.
+app.get("/api/captures/:id/image", (req, res) => {
+  const c = db.prepare(`SELECT image_path FROM captures WHERE id=?`).get(req.params.id) as any;
+  if (!c) return res.status(404).end();
+  res.sendFile(c.image_path);
+});
+
+// Resume: reopen exactly where the user left off. The whole point of having captured it.
+app.post("/api/loops/:id/resume", (req, res) => {
+  const l = db.prepare(`SELECT capture_id FROM loops WHERE id=?`).get(req.params.id) as any;
+  const c = l?.capture_id ? db.prepare(`SELECT url, app FROM captures WHERE id=?`).get(l.capture_id) as any : null;
+  if (c?.url) execFile("open", [c.url]);
+  else if (c?.app) execFile("open", ["-a", c.app]);
+  else return res.status(404).json({ error: "nothing to reopen for this loop" });
+  res.json({ ok: true, opened: c.url ?? c.app });
+});
+
+app.post("/api/loops/:id/status", (req, res) => {
+  const { status } = req.body ?? {};
+  if (!["done", "dismissed", "open"].includes(status)) return res.status(400).json({ error: "bad status" });
+  db.prepare(`UPDATE loops SET status=? WHERE id=?`).run(status, req.params.id);
+  if (status === "done")
+    db.prepare(`INSERT INTO receipts (at,action,args,decision,loop_id) VALUES (?,?,?,?,?)`)
+      .run(now(), "loop.closed", JSON.stringify({}), "approved", req.params.id);
+  res.json({ ok: true });
+});
 app.get("/api/clearance", (_q, r) => r.json(db.prepare(`SELECT * FROM clearance ORDER BY action_class`).all()));
 app.get("/api/orders", (_q, r) => r.json(db.prepare(`SELECT * FROM standing_orders ORDER BY proposed_at DESC`).all()));
 app.get("/api/dossier", (_q, r) => r.json(db.prepare(`SELECT * FROM dossier ORDER BY learned_at DESC`).all()));
 app.get("/api/receipts", (_q, r) => r.json(db.prepare(`SELECT * FROM receipts ORDER BY id DESC LIMIT 100`).all()));
 app.get("/api/captures", (_q, r) => r.json(db.prepare(`SELECT id,at,app,window_title,url,status FROM captures ORDER BY at DESC`).all()));
+/**
+ * Config surface. TrueForge already owns connector state and OAuth; we present it
+ * and deep-link into its authorize flow rather than rebuilding any of it.
+ */
+app.get("/api/config", async (_q, res) => {
+  const tf = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
+  try {
+    const [configured, catalog] = await Promise.all([
+      fetch(`${tf}/api/v1/settings/mcp-servers`).then((r) => r.json()).catch(() => ({ data: [] })),
+      fetch(`${tf}/api/v1/catalogs/mcp-servers`).then((r) => r.json()).catch(() => ({ data: [] })),
+    ]);
+    const have = new Set((configured.data ?? []).map((c: any) => c.name));
+    res.json({
+      demoMode: process.env.DEMO_MODE === "live" ? "live" : "safe",
+      trueforge: tf,
+      connected: (configured.data ?? []).map((c: any) => ({
+        name: c.name,
+        description: c.manifest?.description ?? "",
+        auth: c.auth_status?.status ?? "unknown",
+        authorizeUrl: `${tf}/api/v1/mcp-servers/${c.name}/authorize`,
+      })),
+      available: (catalog.data ?? [])
+        .filter((c: any) => !have.has(c.name ?? c.manifest?.name))
+        .map((c: any) => ({
+          name: c.name ?? c.manifest?.name,
+          description: c.description ?? c.manifest?.description ?? "",
+        })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 app.get("/health", (_q, r) => r.json({ ok: true }));
 
 app.listen(PORT, async () => {

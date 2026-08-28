@@ -75,21 +75,30 @@ export function buildServer() {
   s.registerTool("loop_upsert", {
     description:
       "Create or update a loop on the mission board. Use after extracting a capture. " +
-      "Check loops_list first — never create a duplicate of something already open.",
+      "Check loops_list first — never create a duplicate of something already open. " +
+      "Carry stakes and effortMinutes from the extraction. When you have prepared work, " +
+      "put the full draft/checklist in preparedNote — the user reads it verbatim.",
     inputSchema: {
       loopId: z.string().optional(), title: z.string(), kind: z.string(), status: z.string(),
       summary: z.string().optional(), missing: z.array(z.string()).optional(),
       deadline: z.string().optional(), captureId: z.string().optional(),
+      preparedNote: z.string().optional(),
+      stakes: z.enum(["official", "money", "work", "social", "personal", "none"]).optional(),
+      effortMinutes: z.number().int().optional(),
     },
     annotations: WRITE,   // deliberately NOT in require_approval_for_tools — board updates must never nag
   }, async (a) => {
     const lid = a.loopId ?? id("loop");
-    db.prepare(`INSERT INTO loops (id,title,kind,status,summary,missing,deadline,capture_id,created_at)
-                VALUES (?,?,?,?,?,?,?,?,?)
+    db.prepare(`INSERT INTO loops (id,title,kind,status,summary,missing,deadline,capture_id,created_at,prepared_note,stakes,effort_minutes)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET title=excluded.title, status=excluded.status,
-                  summary=excluded.summary, missing=excluded.missing, deadline=excluded.deadline`)
+                  summary=excluded.summary, missing=excluded.missing, deadline=excluded.deadline,
+                  prepared_note=COALESCE(excluded.prepared_note, prepared_note),
+                  stakes=COALESCE(excluded.stakes, stakes),
+                  effort_minutes=COALESCE(excluded.effort_minutes, effort_minutes)`)
       .run(lid, a.title, a.kind, a.status, a.summary ?? null,
-           JSON.stringify(a.missing ?? []), a.deadline ?? null, a.captureId ?? null, now());
+           JSON.stringify(a.missing ?? []), a.deadline ?? null, a.captureId ?? null, now(),
+           a.preparedNote ?? null, a.stakes ?? null, a.effortMinutes ?? null);
     if (a.captureId) db.prepare(`UPDATE captures SET status='linked', loop_id=? WHERE id=?`).run(lid, a.captureId);
     return text({ loopId: lid });
   });
