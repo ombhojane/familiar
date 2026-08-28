@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Familiar, type CreatureState } from "./Familiar";
 import {
   getLoops, getClearance, getOrders, getDossier, getReceipts, getCaptures,
-  LEVELS, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture,
+  LEVELS, runSweep, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture, type Lane,
 } from "./api";
 import { Gate } from "./Gate";
 import { newSession, say, answer, decide, digestRaw, type Pending, type TurnResult } from "./session";
@@ -33,6 +33,8 @@ export function App() {
   const [said, setSaid] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [lanes, setLanes] = useState<Lane[] | null>(null);
+  const [sweeping, setSweeping] = useState(false);
   const sid = useRef<string | null>(null);
 
   const top = Math.max(0, ...clearance.map((c) => c.level));
@@ -54,6 +56,16 @@ export function App() {
   };
 
   const send = (text: string) => run(async () => say(await ensure(), text), "sweeping");
+
+  const sweep = async () => {
+    setSweeping(true); setState("sweeping"); setLanes([]);
+    try {
+      const out = await runSweep();
+      setLanes(out.lanes);
+      setSaid(out.loops ? `${out.lanes.length} field agents came back.` : "Nothing open to sweep.");
+    } catch (e) { setSaid(String(e)); }
+    finally { setSweeping(false); setState("idle"); }
+  };
 
   const onDecide = async (d: "approved" | "denied", reason?: string) => {
     if (!pending) return;
@@ -85,6 +97,7 @@ export function App() {
       <Stage
         state={state} clearance={top} loops={loops} receipts={receipts}
         said={said} busy={busy} onSend={send}
+        lanes={lanes} sweeping={sweeping} onSweep={sweep}
         onRead={unprocessed > 0 ? () => send("A capture arrived from HOLD. Read it and put it on the mission board.") : null}
       />
       <Knows clearance={clearance} orders={orders} dossier={dossier} />
@@ -139,10 +152,11 @@ function MissionBoard({ loops, pending }: { loops: Loop[]; pending: number }) {
 }
 
 function Stage({
-  state, clearance, loops, receipts, said, busy, onSend, onRead,
+  state, clearance, loops, receipts, said, busy, onSend, onRead, lanes, sweeping, onSweep,
 }: {
   state: CreatureState; clearance: number; loops: Loop[]; receipts: Receipt[];
   said: string; busy: boolean; onSend: (t: string) => void; onRead: (() => void) | null;
+  lanes: Lane[] | null; sweeping: boolean; onSweep: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const ready = loops.filter((l) => l.status === "prepared").length;
@@ -154,9 +168,14 @@ function Stage({
         <p className="creature-line">
           {said || (ready > 0 ? `${ready} ready for you.` : "Nothing needs you right now.")}
         </p>
-        {onRead && !busy && (
-          <button className="primary" onClick={onRead}>Read what I held</button>
-        )}
+        <div className="stage-actions">
+          {onRead && !busy && <button className="primary" onClick={onRead}>Read what I held</button>}
+          {loops.some((l) => l.status !== "prepared") && (
+            <button onClick={onSweep} disabled={sweeping || busy}>
+              {sweeping ? "Field agents out…" : "Sweep the board"}
+            </button>
+          )}
+        </div>
       </div>
 
       <form
@@ -171,6 +190,24 @@ function Stage({
           {busy ? "…" : "Send"}
         </button>
       </form>
+
+      {lanes && lanes.length > 0 && (
+        <section className="lanes">
+          <header className="rail-head">
+            <h2>Field agents</h2>
+            <span className="count num">{lanes.filter((l) => l.done).length}/{lanes.length}</span>
+          </header>
+          {lanes.map((l) => (
+            <div key={l.threadId} className={`lane ${l.done ? "done" : "live"}`}>
+              <div className="lane-bar"><span /></div>
+              <div className="lane-body">
+                <span className="mono lane-name">{l.name}</span>
+                {l.output && <span className="muted small">{l.output.slice(0, 96)}</span>}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="ledger">
         <header className="rail-head"><h2>Receipts</h2><span className="count num">{receipts.length}</span></header>
