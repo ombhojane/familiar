@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db, now, id } from "./db.js";
 import { extract } from "./perception.js";
-import * as pb from "./porkbun.js";
+import * as act from "./actions.js";
 
 const text = (v: unknown) => ({ content: [{ type: "text" as const, text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
 
@@ -122,37 +122,42 @@ export function buildServer() {
     inputSchema: {}, annotations: RO,
   }, async () => text(db.prepare(`SELECT * FROM clearance ORDER BY action_class`).all()));
 
-  // ---------- ACTIONS ----------
-  s.registerTool("act_domain_preview", {
-    description: "Dry-run a domain registration. Returns real cost and balance without charging. Use this to build the approval request.",
-    inputSchema: { domain: z.string() }, annotations: RO,
-  }, async ({ domain }) => text(await pb.previewRegister(domain)));
+  // ---------- ACTIONS : real, on systems the user owns ----------
+  s.registerTool("act_repo_state", {
+    description: "Current state of the user's repository, straight from GitHub. Use to check before and prove after.",
+    inputSchema: {}, annotations: RO,
+  }, async () => text(await act.repoState()));
 
-  s.registerTool("act_domain_register", {
-    description: "REGISTER A DOMAIN FOR REAL. Spends money. Cannot be undone or refunded.",
-    inputSchema: { domain: z.string() }, annotations: DESTRUCTIVE,
-  }, async ({ domain }) => {
-    const out = await pb.register(domain, id("idem"));
-    db.prepare(`INSERT INTO receipts (at,action,args,decision,outcome) VALUES (?,?,?,?,?)`)
-      .run(now(), "domain.register", JSON.stringify({ domain }), "approved", JSON.stringify(out));
-    return text(out);
-  });
-
-  s.registerTool("act_domain_verify", {
-    description: "Confirm a domain is really registered, straight from the registrar.",
-    inputSchema: { domain: z.string() }, annotations: RO,
-  }, async ({ domain }) => text(await pb.getDomain(domain)));
-
-  s.registerTool("act_dns_upsert", {
-    description: "Add or update a DNS record on a domain the user owns. Reversible — this class can earn standing authority.",
-    inputSchema: { domain: z.string(), type: z.string(), name: z.string(), content: z.string() },
+  s.registerTool("act_repo_describe", {
+    description:
+      "Set the repository description. REVERSIBLE — it can be changed back at any time, " +
+      "so this action class can earn standing authority.",
+    inputSchema: { description: z.string() },
     annotations: WRITE,
-  }, async ({ domain, type, name, content }) => {
-    const out = await pb.upsertDns(domain, type, name, content);
+  }, async ({ description }) => {
+    const out = await act.setRepoDescription(description);
     db.prepare(`INSERT INTO receipts (at,action,args,decision,outcome) VALUES (?,?,?,?,?)`)
-      .run(now(), "dns.upsert", JSON.stringify({ domain, type, name }), "approved", JSON.stringify(out));
+      .run(now(), "repo.describe", JSON.stringify({ description }), "approved", JSON.stringify(out));
     return text(out);
   });
+
+  s.registerTool("act_release_publish", {
+    description:
+      "Publish a GitHub release. IRREVERSIBLE — it is public the moment it lands and the tag enters " +
+      "repository history. This action class is capped at level 2 and can never earn standing authority.",
+    inputSchema: { tag: z.string(), title: z.string(), notes: z.string() },
+    annotations: DESTRUCTIVE,
+  }, async ({ tag, title, notes }) => {
+    const out = await act.publishRelease(tag, title, notes);
+    db.prepare(`INSERT INTO receipts (at,action,args,decision,outcome) VALUES (?,?,?,?,?)`)
+      .run(now(), "release.publish", JSON.stringify({ tag, title }), "approved", JSON.stringify(out));
+    return text(out);
+  });
+
+  s.registerTool("act_release_verify", {
+    description: "Confirm a release really exists, read straight from GitHub.",
+    inputSchema: { tag: z.string() }, annotations: RO,
+  }, async ({ tag }) => text(await act.verifyRelease(tag)));
 
   return s;
 }

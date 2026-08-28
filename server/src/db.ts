@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS standing_orders (
   learned_from TEXT,                -- JSON array of receipt ids
   proposed_at  TEXT NOT NULL,
   ratified_at  TEXT,
-  enforced_by  TEXT                 -- familiar | porkbun_spend_cap
+  enforced_by  TEXT                 -- familiar | external (e.g. a provider-side policy)
 );
 
 -- EARNED AUTONOMY, per action class. reversible=0 means capped at L2 forever.
@@ -86,11 +86,11 @@ CREATE TABLE IF NOT EXISTS receipts (
 
 // Action classes. reversible=0 => permanently capped at L2 (the ceiling rule).
 const SEED: [string, number][] = [
-  ["dns.upsert", 1],
-  ["domain.register", 0],
-  ["email.send", 0],
-  ["npm.publish", 0],
-  ["memory.write", 1],
+  ["repo.describe", 1],    // reversible -> can reach L3
+  ["memory.write", 1],     // reversible -> can reach L3
+  ["release.publish", 0],  // IRREVERSIBLE -> capped at L2 forever
+  ["email.send", 0],       // IRREVERSIBLE -> capped at L2 forever
+  ["npm.publish", 0],      // IRREVERSIBLE -> capped at L2 forever
 ];
 for (const [cls, rev] of SEED) {
   db.prepare(
