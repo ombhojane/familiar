@@ -50,14 +50,21 @@ def report(evs):
                 print(f"  TOOL → {name} {args}")
     if txt.strip():
         print(f"  SAID → {txt.strip()[:400]}")
+    def find_name(tcid):
+        # The call appears in streaming deltas and again in the final message;
+        # source_event_id is not always resolvable once deltas are merged.
+        for e in evs:
+            for c in (e.get("toolCalls") or e.get("tool_calls") or []):
+                if c.get("id") == tcid:
+                    n = (c.get("toolInfo") or c.get("tool_info") or {}).get("name")
+                    if n:
+                        return n
+        return None
+
     for e in evs:
         if e.get("type") == "tool.approval_required":
             tcid = e["tool_calls"][0]["id"]
-            src = byid.get(e["tool_calls"][0].get("source_event_id"), {})
-            name = None
-            for c in (src.get("toolCalls") or []):
-                if c.get("id") == tcid:
-                    name = (c.get("toolInfo") or {}).get("name")
+            name = find_name(tcid)
             print(f"  🛑 GATE on {name or '?'} — halted, nothing executed")
             return "gate", tcid
         if e.get("type") == "tool.response_required":
@@ -81,7 +88,9 @@ def decide(sid, tcid, tool_name, decision, reason=None):
         print(f"     clearance: {p['why']}" + ("  🏆 PROMOTED" if p["promoted"] else ""))
     if out.get("patched"):
         print(f"     🏆 PATCHED session policy -> gated now: {out['patched']['gated']}")
-    return out
+    # The control plane already drained the resumed turn; hand its events back so the
+    # caller can see whether it stopped at another gate.
+    return events(out.get("resumed", ""))
 
 def allow(sid, tcid):
     return turn(sid, [{"type": "user.tool_approval", "thread_id": "main",
