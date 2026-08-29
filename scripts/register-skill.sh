@@ -4,7 +4,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 TF=${TRUEFORGE_BASE_URL:-http://localhost:8790}
-REF=${1:-main}
+REF=${1:-finish-the-product}
 
 curl -s -X PUT "$TF/api/v1/settings/skills" -H 'Content-Type: application/json' -d "{
   \"manifest\": {
