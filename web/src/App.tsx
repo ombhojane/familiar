@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Familiar, type CreatureState } from "./Familiar";
 import {
   getLoops, getClearance, getOrders, getDossier, getReceipts, getCaptures,
-  LEVELS, runSweep, resumeLoop, setLoopStatus, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture, type Lane,
+  LEVELS, runSweep, resumeLoop, setLoopStatus, getUsage, getActivity, type Usage, type Activity, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture, type Lane,
 } from "./api";
 import { Gate } from "./Gate";
 import { LoopDrawer } from "./LoopDrawer";
@@ -29,6 +29,8 @@ export function App() {
   const dossier = useLive<Fact[]>(getDossier, []);
   const receipts = useLive<Receipt[]>(getReceipts, []);
   const captures = useLive<Capture[]>(getCaptures, []);
+  const usage = useLive<Usage | null>(getUsage as any, null, 4000);
+  const activity = useLive<Activity | null>(getActivity as any, null, 2500);
 
   const [state, setState] = useState<CreatureState>("idle");
   const [pending, setPending] = useState<Pending | null>(null);
@@ -45,6 +47,15 @@ export function App() {
   const unprocessed = captures.filter((c) => c.status === "unprocessed").length;
 
   const ensure = async () => (sid.current ??= await newSession());
+
+  // When the user is not mid-interaction, the creature reflects what the
+  // server is genuinely doing. It never performs activity it isn't doing.
+  useEffect(() => {
+    if (busy || pending || sweeping) return;
+    if (activity?.state === "sweeping") setState("sweeping");
+    else if (activity?.state === "preparing") setState("preparing");
+    else setState("idle");
+  }, [activity?.state, busy, pending, sweeping]);
 
   const apply = (r: TurnResult) => {
     if (r.said) setSaid(r.said);
@@ -109,7 +120,7 @@ export function App() {
       <Stage
         view={view} onView={setView}
         state={state} clearance={top} loops={loops} receipts={receipts}
-        said={said} busy={busy} onSend={send}
+        usage={usage} said={said} busy={busy} onSend={send}
         lanes={lanes} sweeping={sweeping} onSweep={sweep}
         onRead={unprocessed > 0 ? () => send("A capture arrived from HOLD. Read it and put it on the mission board.") : null}
       />
@@ -176,10 +187,11 @@ function MissionBoard({ loops, pending, onOpen }: { loops: Loop[]; pending: numb
 }
 
 function Stage({
-  view, onView,
+  view, onView, usage,
   state, clearance, loops, receipts, said, busy, onSend, onRead, lanes, sweeping, onSweep,
 }: {
   view: "board" | "settings"; onView: (v: "board" | "settings") => void;
+  usage: Usage | null;
   state: CreatureState; clearance: number; loops: Loop[]; receipts: Receipt[];
   said: string; busy: boolean; onSend: (t: string) => void; onRead: (() => void) | null;
   lanes: Lane[] | null; sweeping: boolean; onSweep: () => void;
@@ -208,6 +220,18 @@ function Stage({
           )}
         </div>
       </div>
+
+      {usage && usage.totals.calls > 0 && (
+        <div className="usage-strip">
+          {usage.bySource.map((u) => (
+            <span key={u.source + u.model} className="usage-chip">
+              <b>{u.source}</b> <span className="mono">{u.model.replace("gpt-5.6-", "")}</span>
+              <span className="num"> {(u.i + u.o).toLocaleString()}t</span>
+            </span>
+          ))}
+          <span className="usage-total num">${usage.totals.usd.toFixed(4)}</span>
+        </div>
+      )}
 
       <form
         className="composer"

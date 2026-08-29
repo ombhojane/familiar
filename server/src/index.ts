@@ -9,9 +9,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { buildServer } from "./mcp.js";
 import { db, now, id } from "./db.js";
 import { recordDecision, evaluatePromotion, patchSessionPolicy, gatedTools, syncAgentPolicy } from "./control.js";
-import { startIngest, drain } from "./ingest.js";
-import { startSweep, lanes } from "./sweep.js";
+import { startIngest, drain, isIngesting } from "./ingest.js";
+import { startSweep, lanes, isSweeping } from "./sweep.js";
 import { triage } from "./triage.js";
+import { summary as usageSummary, harvestTurn } from "./usage.js";
+import { startScheduler, schedulerStatus } from "./scheduler.js";
 import { execFile } from "node:child_process";
 
 const PORT = Number(process.env.PORT ?? 3333);
@@ -80,6 +82,7 @@ app.post("/api/decision", async (req, res) => {
   // Drain the resumed turn's stream so the caller knows it actually finished.
   // Without this the session is still running and the next turn is rejected 422.
   const resumed = await upstream.text();
+  harvestTurn(resumed, "gpt-5.6-terra");
 
   res.json({
     recorded: cls ?? toolName,
@@ -163,6 +166,8 @@ app.get("/api/config", async (_q, res) => {
     const have = new Set((configured.data ?? []).map((c: any) => c.name));
     res.json({
       demoMode: process.env.DEMO_MODE === "live" ? "live" : "safe",
+      schedule: schedulerStatus(),
+      usage: usageSummary().totals,
       trueforge: tf,
       connected: (configured.data ?? []).map((c: any) => ({
         name: c.name,
@@ -182,6 +187,19 @@ app.get("/api/config", async (_q, res) => {
   }
 });
 
+/** What Familiar is doing right now — the creature reads this so it is alive
+ *  even when nobody is clicking. Never invents activity it isn't doing. */
+app.get("/api/activity", (_q, r) => {
+  const unread = (db.prepare(`SELECT COUNT(*) n FROM captures WHERE status='unprocessed'`).get() as any).n;
+  const prepared = (db.prepare(`SELECT COUNT(*) n FROM loops WHERE status='prepared'`).get() as any).n;
+  r.json({
+    state: isSweeping() ? "sweeping" : isIngesting() ? "preparing" : "idle",
+    unread, prepared,
+  });
+});
+
+app.get("/api/usage", (_q, r) => r.json(usageSummary()));
+
 app.get("/health", (_q, r) => r.json({ ok: true }));
 
 app.listen(PORT, async () => {
@@ -190,4 +208,5 @@ app.listen(PORT, async () => {
   const sync = await syncAgentPolicy();
   console.log(`policy sync   →  ${JSON.stringify(sync)}`);
   startIngest();
+  startScheduler();
 });

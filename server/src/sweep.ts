@@ -1,4 +1,5 @@
 import { db } from "./db.js";
+import { harvestTurn } from "./usage.js";
 
 const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
 
@@ -8,12 +9,16 @@ const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
  * sandbox and tool set but get no conversation history, so each instruction has to
  * be self-contained.
  */
+let sweeping = false;
+export const isSweeping = () => sweeping;
+
 export async function startSweep(): Promise<{ sessionId: string; loops: number; raw: string }> {
   const open = db
     .prepare(`SELECT id, title, summary, missing FROM loops WHERE status IN ('open','sweeping') ORDER BY created_at DESC LIMIT 5`)
     .all() as { id: string; title: string; summary: string | null; missing: string }[];
 
   if (open.length === 0) return { sessionId: "", loops: 0, raw: "" };
+  sweeping = true;
 
   const brief = open
     .map((l, i) => {
@@ -59,6 +64,8 @@ When they are all back, tell me in one line how many are prepared.`,
 
   db.prepare(`UPDATE loops SET status='sweeping' WHERE status='open'`).run();
   const raw = await turn.text();
+  harvestTurn(raw, "gpt-5.6-terra");
+  sweeping = false;
   return { sessionId, loops: open.length, raw };
 }
 

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { readFileSync } from "node:fs";
+import { recordUsage } from "./usage.js";
 
 let _client: OpenAI | null = null;
 const client = () => (_client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
@@ -86,6 +87,12 @@ export async function extract(
       type: "json_schema",
       json_schema: { name: "screen_extraction", schema: SCHEMA, strict: true },
     },
+  });
+
+  recordUsage({
+    source: "perception", model: model(),
+    input: res.usage?.prompt_tokens ?? 0,
+    output: res.usage?.completion_tokens ?? 0,
   });
 
   const raw = res.choices[0]?.message?.content ?? "{}";
