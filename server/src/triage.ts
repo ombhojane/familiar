@@ -25,8 +25,13 @@ export function triage(loop: {
     const ts = new Date(loop.deadline).getTime();
     if (Number.isFinite(ts)) {
       const days = (ts - Date.now()) / 86400000;
-      urgency = Math.min(14, Math.max(0, 14 - days)) / 14;
-      why.push(days < 0 ? `deadline ${loop.deadline}` : `due in ${Math.max(0, Math.ceil(days))}d (read off the page)`);
+      // Decay over 30 days, floored at 0.2. The floor matters: with a hard 14-day window a
+      // deadline exactly 14 days out scored 0 — i.e. *below* the 0.15 given to a loop with
+      // no deadline at all. A known deadline must never rank under an unknown one.
+      urgency = Math.min(1, Math.max(0.2, 1 - 0.8 * (days / 30)));
+      why.push(days < 0
+        ? `overdue since ${loop.deadline}`
+        : `due in ${Math.max(0, Math.ceil(days))}d (read off the page)`);
     }
   }
 
