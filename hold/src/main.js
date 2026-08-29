@@ -140,9 +140,30 @@ app.whenReady().then(() => {
  *   2. a prepared loop's deadline is within 72h (once per loop, ever)
  * Never on staleness. Never repeats. The board shows ready, never late.
  */
-const seenPrepared = new Set();
-const warnedDeadline = new Set();
-let firstPoll = true;
+const { app: electronApp } = require("electron");
+const { readFileSync, writeFileSync, mkdirSync } = require("node:fs");
+const { join: pathJoin, dirname: pathDirname } = require("node:path");
+
+// "Once per loop, ever" has to survive a restart. An in-memory Set meant every prepared
+// loop with a near deadline warned again the first time HOLD reopened.
+const STATE_FILE = pathJoin(electronApp.getPath("userData"), "notified.json");
+function loadState() {
+  try { return JSON.parse(readFileSync(STATE_FILE, "utf8")); } catch { return { prepared: [], deadline: [] }; }
+}
+function saveState(s) {
+  try {
+    mkdirSync(pathDirname(STATE_FILE), { recursive: true });
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+  } catch {}
+}
+const persisted = loadState();
+const seenPrepared = new Set(persisted.prepared ?? []);
+const warnedDeadline = new Set(persisted.deadline ?? []);
+const persist = () =>
+  saveState({ prepared: [...seenPrepared], deadline: [...warnedDeadline] });
+
+// Only suppress the very first poll of a fresh install, where everything looks new.
+let firstPoll = seenPrepared.size === 0;
 
 async function pollLoops() {
   try {
@@ -152,6 +173,7 @@ async function pollLoops() {
     for (const l of loops) {
       if (l.status === "prepared" && !seenPrepared.has(l.id)) {
         seenPrepared.add(l.id);
+        persist();
         if (!firstPoll) {
           new Notification({
             title: "Ready for you",
@@ -164,6 +186,7 @@ async function pollLoops() {
         const days = (new Date(l.deadline) - Date.now()) / 86400000;
         if (days >= 0 && days <= 3) {
           warnedDeadline.add(l.id);
+          persist();
           new Notification({
             title: `Due in ${Math.max(1, Math.ceil(days))} day${days > 1 ? "s" : ""}`,
             body: `${l.title} is prepared and waiting.`,
@@ -173,6 +196,7 @@ async function pollLoops() {
       }
     }
     firstPoll = false;
+    persist();
   } catch {}
 }
 setInterval(pollLoops, 30000);

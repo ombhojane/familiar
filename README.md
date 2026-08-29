@@ -164,7 +164,23 @@ reviewed by Qodo before merge.
 - Representative PR: **https://github.com/ombhojane/familiar/pull/2** — "The last meter: loops
   become doors, not receipts"
 
-<!-- After Qodo reviews PR #1, summarise its findings and our responses here. -->
+Qodo raised **13 findings on PR #2 — 7 High, 6 Medium/Low. All 13 were fixed**, none dismissed.
+
+The High-severity ones were real defects, not style:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | `register.sh` updated `data[0]`, so it could overwrite an unrelated agent and still leave Familiar unregistered | look the agent up by name |
+| 2 | The scheduler wrote today's `last_sweep` *before* the sweep succeeded, so a transient failure looked complete and nothing retried until the next day | mark the day only on completion |
+| 3 | The scheduler and `POST /api/sweep` could race and run duplicate sub-agents over the same loops | claim the sweep atomically |
+| 4 | A sweep marked *every* open loop `sweeping` while processing only five, stranding the rest with nothing working on them | mark only the selected loops |
+| 5 | `POST /loops/:id/status` wrote a `loop.closed` receipt without checking the transition happened — repeats and unknown ids forged audit entries | write a receipt only on a real transition |
+| 12 | `register.sh` never registered the `close-a-loop` skill the agent manifest requires | register it in the same path |
+| 13 | **The screenshot endpoint served full captures unauthenticated on all interfaces** | bind to loopback only |
+
+Medium/Low: `open` failures reported as successful resumes (6), deadline warnings repeating after every HOLD restart (7), `dev.sh stop` using global `pkill` and killing unrelated dev servers (8), negative effort producing a non-finite triage score (9), unparseable deadlines producing `NaN` and destroying board ordering (10), and the sweep flag never resetting after a throw (11).
+
+Finding 13 was verified fixed by confirming the server refuses connections on the LAN address while still serving on localhost.
 
 ## Limitations
 

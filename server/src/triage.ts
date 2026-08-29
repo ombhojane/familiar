@@ -20,9 +20,14 @@ export function triage(loop: {
 
   let urgency = 0.15;
   if (loop.deadline) {
-    const days = (new Date(loop.deadline).getTime() - Date.now()) / 86400000;
-    urgency = Math.min(14, Math.max(0, 14 - days)) / 14;
-    why.push(days < 0 ? `deadline ${loop.deadline}` : `due in ${Math.max(0, Math.ceil(days))}d (read off the page)`);
+    // A model-produced or hand-edited date can be unparseable. NaN would poison the score
+    // into null and silently destroy the board's ordering, so ignore it rather than trust it.
+    const ts = new Date(loop.deadline).getTime();
+    if (Number.isFinite(ts)) {
+      const days = (ts - Date.now()) / 86400000;
+      urgency = Math.min(14, Math.max(0, 14 - days)) / 14;
+      why.push(days < 0 ? `deadline ${loop.deadline}` : `due in ${Math.max(0, Math.ceil(days))}d (read off the page)`);
+    }
   }
 
   const sw = STAKES_W[loop.stakes ?? "none"] ?? 0.3;
@@ -31,7 +36,8 @@ export function triage(loop: {
   const prepared = loop.status === "prepared";
   if (prepared) why.push("prepared — one tap from done");
 
-  const mins = loop.effort_minutes ?? 30;
+  // Clamp: a negative estimate makes log2 non-finite and the whole score serialises as null.
+  const mins = Math.min(600, Math.max(0, loop.effort_minutes ?? 30));
   const quickwin = 1 / Math.log2(2 + mins / 10);
   if (mins <= 15) why.push(`~${mins} min`);
 

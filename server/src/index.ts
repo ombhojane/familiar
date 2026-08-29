@@ -17,6 +17,9 @@ import { startScheduler, schedulerStatus } from "./scheduler.js";
 import { execFile } from "node:child_process";
 
 const PORT = Number(process.env.PORT ?? 3333);
+// Captures are full screenshots of whatever the user was looking at. Bind to loopback
+// only: this is a local app, and there is no reason for a network peer to reach it.
+const HOST = process.env.HOST ?? "127.0.0.1";
 const CAPTURE_DIR = resolve(process.env.CAPTURE_DIR ?? "./captures");
 mkdirSync(CAPTURE_DIR, { recursive: true });
 
@@ -132,20 +135,33 @@ app.get("/api/captures/:id/image", (req, res) => {
 app.post("/api/loops/:id/resume", (req, res) => {
   const l = db.prepare(`SELECT capture_id FROM loops WHERE id=?`).get(req.params.id) as any;
   const c = l?.capture_id ? db.prepare(`SELECT url, app FROM captures WHERE id=?`).get(l.capture_id) as any : null;
-  if (c?.url) execFile("open", [c.url]);
-  else if (c?.app) execFile("open", ["-a", c.app]);
-  else return res.status(404).json({ error: "nothing to reopen for this loop" });
-  res.json({ ok: true, opened: c.url ?? c.app });
+  const target = c?.url ?? c?.app;
+  if (!target) return res.status(404).json({ error: "nothing to reopen for this loop" });
+
+  // Wait for `open` to actually succeed. Reporting ok:true for a missing app or a bad
+  // URL tells the user they are back where they left off when they are not.
+  execFile("open", c?.url ? [c.url] : ["-a", c.app], (err) => {
+    if (err) return res.status(502).json({ error: `could not reopen: ${err.message}`, target });
+    res.json({ ok: true, opened: target });
+  });
 });
 
 app.post("/api/loops/:id/status", (req, res) => {
   const { status } = req.body ?? {};
   if (!["done", "dismissed", "open"].includes(status)) return res.status(400).json({ error: "bad status" });
-  db.prepare(`UPDATE loops SET status=? WHERE id=?`).run(status, req.params.id);
-  if (status === "done")
+
+  // Only write a receipt for a transition that actually happened. The ledger is presented
+  // as an audit trail, so a repeated call or an unknown id must not forge an entry.
+  const before = db.prepare(`SELECT status FROM loops WHERE id=?`).get(req.params.id) as any;
+  if (!before) return res.status(404).json({ error: "no such loop" });
+
+  const changed = before.status !== status;
+  if (changed) db.prepare(`UPDATE loops SET status=? WHERE id=?`).run(status, req.params.id);
+  if (changed && status === "done")
     db.prepare(`INSERT INTO receipts (at,action,args,decision,loop_id) VALUES (?,?,?,?,?)`)
-      .run(now(), "loop.closed", JSON.stringify({}), "approved", req.params.id);
-  res.json({ ok: true });
+      .run(now(), "loop.closed", JSON.stringify({ from: before.status }), "approved", req.params.id);
+
+  res.json({ ok: true, changed });
 });
 app.get("/api/clearance", (_q, r) => r.json(db.prepare(`SELECT * FROM clearance ORDER BY action_class`).all()));
 app.get("/api/orders", (_q, r) => r.json(db.prepare(`SELECT * FROM standing_orders ORDER BY proposed_at DESC`).all()));
@@ -202,8 +218,8 @@ app.get("/api/usage", (_q, r) => r.json(usageSummary()));
 
 app.get("/health", (_q, r) => r.json({ ok: true }));
 
-app.listen(PORT, async () => {
-  console.log(`familiar-mcp  →  http://localhost:${PORT}/mcp`);
+app.listen(PORT, HOST, async () => {
+  console.log(`familiar-mcp  →  http://${HOST}:${PORT}/mcp  (loopback only)`);
   console.log(`captures      →  ${CAPTURE_DIR}`);
   const sync = await syncAgentPolicy();
   console.log(`policy sync   →  ${JSON.stringify(sync)}`);

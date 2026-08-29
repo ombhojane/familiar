@@ -27,9 +27,16 @@ async function maybeSweep() {
   ).get() as any).n as number;
   if (pending === 0) { markRun(); return; }
 
-  markRun();
   console.log(`overnight     →  sweeping ${pending} loop(s)`);
-  try { await startSweep(); } catch (e) { console.error("overnight sweep:", String(e)); }
+  try {
+    const out = await startSweep();
+    // Only record the day once the sweep actually completed. Marking it up front meant a
+    // transient TrueForge failure looked like a finished sweep and nothing retried until
+    // the next day. A skipped run (another sweep already in flight) is not a completion.
+    if (!out.skipped) markRun();
+  } catch (e) {
+    console.error("overnight sweep failed, will retry next tick:", String(e));
+  }
 }
 
 export function startScheduler() {
