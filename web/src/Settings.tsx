@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 type Config = {
   demoMode: string; trueforge: string;
+  schedule: { hour: number; lastRun: string | null; nextRun: string };
+  usage: { tokens: number; usd: number; calls: number };
   connected: { name: string; description: string; auth: string; authorizeUrl: string }[];
   available: { name: string; description: string }[];
 };
@@ -15,11 +17,19 @@ export function Settings({ hotkey = "⌃⌥⌘H" }: { hotkey?: string }) {
 
   if (!cfg) return <p className="empty">Loading configuration…</p>;
 
+  const hh = String(cfg.schedule.hour).padStart(2, "0");
+
   return (
     <div className="settings">
       <section>
         <h3 className="drawer-h3">This Familiar</h3>
         <div className="kv"><span>Hold hotkey</span><span className="mono">{hotkey}</span></div>
+        <div className="kv"><span>Overnight sweep</span>
+          <span>{hh}:00 daily · {cfg.schedule.lastRun ? `last ran ${cfg.schedule.lastRun}` : "not run yet"}</span>
+        </div>
+        <div className="kv"><span>Spent so far</span>
+          <span className="num">${cfg.usage.usd.toFixed(4)} · {cfg.usage.tokens.toLocaleString()} tokens</span>
+        </div>
         <div className="kv"><span>Mode</span>
           <span className={cfg.demoMode === "live" ? "mode live" : "mode"}>
             {cfg.demoMode === "live" ? "live — real actions" : "safe — dry runs only"}

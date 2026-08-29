@@ -234,3 +234,10 @@ button, input, textarea, a { -webkit-app-region: no-drag; }
 .conn-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--border-strong); flex: 0 0 auto; }
 .dot.ok { background: var(--ok); }
+
+/* perception vs cognition, and what it cost — TrueFoundry's own scoreboard */
+.usage-strip { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: 11px; }
+.usage-chip { background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 2px var(--s2); color: var(--text-secondary); }
+.usage-chip b { color: var(--text-primary); font-weight: 500; }
+.usage-total { margin-left: auto; color: var(--text-tertiary); }
