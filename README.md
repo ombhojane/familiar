@@ -161,7 +161,7 @@ scripts/   dev.sh (start everything) · register.sh · test drivers
 Every substantive change from the `finish-the-product` branch onward goes through a pull request
 reviewed by Qodo before merge.
 
-- Representative PR: **https://github.com/ombhojane/familiar/pull/1** — "The last meter: loops
+- Representative PR: **https://github.com/ombhojane/familiar/pull/2** — "The last meter: loops
   become doors, not receipts"
 
 <!-- After Qodo reviews PR #1, summarise its findings and our responses here. -->
