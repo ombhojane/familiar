@@ -111,6 +111,7 @@ for (const ddl of [
   `ALTER TABLE loops ADD COLUMN prepared_note TEXT`,
   `ALTER TABLE loops ADD COLUMN stakes TEXT`,
   `ALTER TABLE loops ADD COLUMN effort_minutes INTEGER`,
+  `ALTER TABLE loops ADD COLUMN drafts TEXT`,
 ]) { try { db.exec(ddl); } catch {} }
 
 export const now = () => new Date().toISOString();

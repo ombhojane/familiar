@@ -23,13 +23,16 @@ definition of "prepared". Write the *next physical action*, not a category:
 - Good: "Enter 'Catch up this evening' in the Subject field, then Send."
 - Bad: "Complete the email."
 
-## 3. Prepare, but never commit
+## 3. Write the answers
 
-Do everything that is safe and reversible:
+For every missing field, write the **actual text they will paste in**. Finished prose, in
+their voice. This is the whole job.
 
-- fill in what you can determine from the dossier
-- draft the text in the person's own voice
-- assemble the checklist of what only they can supply
+A draft that says "this section should cover X and Y" has failed. Write X and Y.
+
+If a real detail is genuinely unavailable — a figure, a name, a decision only they can make —
+write the draft anyway, mark the gap clearly, and record what you need in `needsFromYou`.
+Never refuse to draft because something is unknown; draft around it.
 
 Never send, submit, publish, spend, or sign. Those are gated actions and they belong to the
 person, not to you. If preparing would require one, stop and say so.
@@ -40,8 +43,9 @@ Finish with `loop_upsert`:
 
 - `status: "prepared"`
 - `missing`: only what genuinely still requires the person — not things you could determine
-- `preparedNote`: **the full draft or checklist, verbatim**. This is what they read. Work
-  that is not written here is lost.
+- `drafts`: **one finished, pasteable draft per missing field.** This is the deliverable.
+  Anything not in `drafts` cannot be copied and is therefore lost.
+- `preparedNote`: a two-line summary only. The drafts carry the work.
 
 ## 5. Never guilt
 
