@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Loop } from "./api";
 
 /** The door. A loop card was a receipt; this is where it becomes actionable:
@@ -14,6 +15,17 @@ export function LoopDrawer({
 }) {
   const missing: string[] = JSON.parse(loop.missing || "[]");
   const l = loop as any;
+  const drafts: { field: string; draft: string; needsFromYou?: string }[] =
+    (() => { try { return JSON.parse(l.drafts || "[]"); } catch { return []; } })();
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const copy = async (text: string, i: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(i);
+      setTimeout(() => setCopied(null), 1600);
+    } catch { /* clipboard blocked — the text is selectable either way */ }
+  };
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -35,7 +47,27 @@ export function LoopDrawer({
 
         {loop.summary && <p className="drawer-summary">{loop.summary}</p>}
 
-        {missing.length > 0 && (
+        {drafts.length > 0 && (
+          <section>
+            <h3 className="drawer-h3">Written for you — paste these in</h3>
+            {drafts.map((d, i) => (
+              <div className="draft" key={d.field}>
+                <div className="draft-head">
+                  <span className="draft-field">{d.field}</span>
+                  <button onClick={() => copy(d.draft, i)}>
+                    {copied === i ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <pre className="draft-body">{d.draft}</pre>
+                {d.needsFromYou && (
+                  <p className="draft-needs"><span>Only you can supply:</span> {d.needsFromYou}</p>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
+
+        {drafts.length === 0 && missing.length > 0 && (
           <section>
             <h3 className="drawer-h3">Still needed</h3>
             <ul className="missing">{missing.map((m) => <li key={m}>{m}</li>)}</ul>
@@ -44,7 +76,7 @@ export function LoopDrawer({
 
         {l.prepared_note && (
           <section>
-            <h3 className="drawer-h3">Prepared for you</h3>
+            <h3 className="drawer-h3">Notes</h3>
             <pre className="prepared-note">{l.prepared_note}</pre>
           </section>
         )}

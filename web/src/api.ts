@@ -3,6 +3,7 @@ export type Loop = {
   summary: string | null; missing: string; deadline: string | null;
   capture_id: string | null; created_at: string;
   prepared_note?: string | null; stakes?: string | null; effort_minutes?: number | null;
+  drafts?: string | null;
   triage?: { score: number; why: string[] };
 };
 export type Clearance = {
