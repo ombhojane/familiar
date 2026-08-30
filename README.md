@@ -7,6 +7,7 @@ left, prepares it, and asks before it acts.
 It starts with **zero permissions** and earns them one approval at a time. Every decision you
 make becomes a rule it follows forever.
 
+> **Live:** https://familiar-784622175717.asia-south1.run.app
 > Built for the Agent Harness Hackathon on [TrueForge](https://trueforge.dev).
 
 ---
