@@ -36,6 +36,12 @@
   .btn:hover{background:var(--sunken)} .btn.p:hover{background:#1250BC}
   .note{font-size:13px;color:var(--t3)}
 
+  .install{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;
+    padding:11px 12px 11px 16px;background:var(--raised);max-width:560px}
+  .install code{flex:1;font-size:13.5px;color:var(--t1);white-space:nowrap;overflow-x:auto}
+  .install button{font:inherit;font-size:13px;font-weight:500;padding:6px 13px;border-radius:5px;
+    border:1px solid var(--line);background:var(--base);cursor:pointer;flex:0 0 auto}
+  .install button:hover{background:var(--sunken)}
   .keycap{display:inline-flex;gap:4px;vertical-align:middle}
   .keycap span{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;
     padding:2px 7px;font:500 13px/1.4 "JetBrains Mono",monospace;background:var(--raised)}
@@ -97,10 +103,16 @@
     writes the answers, and asks before it acts.
   </p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/ombhojane/familiar/releases/download/v0.1.0/Familiar-0.1.0-arm64.dmg">Download for macOS</a>
-    <a class="btn" href="https://github.com/ombhojane/familiar">Source on GitHub</a>
+    <div class="install">
+      <code id="cmd">curl -fsSL https://familiar.omisaur.app/install.sh | bash</code>
+      <button id="copy" aria-label="Copy install command">Copy</button>
+    </div>
   </div>
-  <p class="note" style="margin-top:14px">Apple silicon · free and open source · your captures stay on your Mac.</p>
+  <p class="note" style="margin-top:16px">
+    macOS · needs <a href="https://nodejs.org">Node 22+</a> · free and open source ·
+    <a href="https://github.com/ombhojane/familiar">source</a> ·
+    <a href="https://github.com/ombhojane/familiar/releases/latest">or download the app</a>
+  </p>
 </div>
 
 <section>
@@ -152,26 +164,28 @@
 
 <section id="run">
   <div class="eyebrow">Install</div>
-  <div class="steps">
+  <pre class="run"><span class="c"># macOS · Node 22+ · takes about two minutes</span>
+curl -fsSL https://familiar.omisaur.app/install.sh | bash</pre>
+  <div class="steps" style="margin-top:30px">
     <div>
       <div class="n">01</div>
-      <h3>Open the app</h3>
-      <p>Drag Familiar to Applications, then double-click <b>Open Familiar.command</b> in the same window. It is signed but not notarised, so macOS blocks it once.</p>
+      <h3>Paste an OpenAI key</h3>
+      <p>The installer asks once. It stays in a local .env and never leaves your machine. Roughly $0.0003 per capture.</p>
     </div>
     <div>
       <div class="n">02</div>
-      <h3>Paste an OpenAI key</h3>
-      <p>Familiar asks for it on first run and stores it in your keychain. Roughly $0.0003 per capture.</p>
+      <h3>Allow screen recording</h3>
+      <p>macOS asks the first time you capture. That is Familiar reading the one window you pressed the key on.</p>
     </div>
     <div>
       <div class="n">03</div>
       <h3>Press the keys</h3>
-      <p>It starts everything itself. Grant Screen Recording when macOS asks, then hold your place anywhere.</p>
+      <p>⌃⌥⌘H over anything unfinished. The dashboard opens at localhost:5173.</p>
     </div>
   </div>
-  <p class="note" style="margin-top:22px">
-    Needs <a href="https://nodejs.org">Node.js 22+</a>, which Familiar uses to run its local service. Prefer to run from source?
-    <a href="https://github.com/ombhojane/familiar">Clone the repo</a> and run <code>./scripts/dev.sh</code>.
+  <p class="note" style="margin-top:24px">
+    There is also a <a href="https://github.com/ombhojane/familiar/releases/latest">packaged .app</a>, though it is
+    not notarised yet, so macOS blocks it once — the disk image includes a script that clears that.
   </p>
 </section>
 
@@ -184,5 +198,12 @@
 </footer>
 
 </div>
+<script>
+  const b=document.getElementById("copy"),c=document.getElementById("cmd");
+  b&&b.addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText(c.textContent.trim());b.textContent="Copied";
+      setTimeout(()=>b.textContent="Copy",1600);}catch{}
+  });
+</script>
 </body>
 </html>
