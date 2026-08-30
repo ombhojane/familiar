@@ -7,3 +7,7 @@ build/
 data/
 captures/
 .DS_Store
+dist-app/
+hold/web-dist/
+hold/server-bundle/
+hold/build/icon.iconset/

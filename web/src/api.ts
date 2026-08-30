@@ -2,6 +2,9 @@ export type Loop = {
   id: string; title: string; kind: string; status: string;
   summary: string | null; missing: string; deadline: string | null;
   capture_id: string | null; created_at: string;
+  prepared_note?: string | null; stakes?: string | null; effort_minutes?: number | null;
+  drafts?: string | null;
+  triage?: { score: number; why: string[] };
 };
 export type Clearance = {
   action_class: string; level: number; reversible: number;
@@ -30,3 +33,17 @@ export const runSweep = () =>
   fetch("/api/sweep", { method: "POST" }).then(
     (r) => r.json() as Promise<{ loops: number; sessionId: string; lanes: Lane[] }>
   );
+
+export const resumeLoop = (id: string) => fetch(`/api/loops/${id}/resume`, { method: "POST" }).then((r) => r.json());
+export const setLoopStatus = (id: string, status: "done" | "dismissed") =>
+  fetch(`/api/loops/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+
+export type Usage = {
+  totals: { tokens: number; usd: number; calls: number };
+  bySource: { source: string; model: string; i: number; o: number; c: number; usd: number; calls: number }[];
+  context: Record<string, number>;
+};
+export const getUsage = () => j<Usage>("/api/usage");
+
+export type Activity = { state: "sweeping" | "preparing" | "idle"; unread: number; prepared: number };
+export const getActivity = () => j<Activity>("/api/activity");

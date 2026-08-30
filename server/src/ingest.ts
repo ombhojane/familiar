@@ -1,4 +1,5 @@
 import { db, now } from "./db.js";
+import { harvestTurn } from "./usage.js";
 
 const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
 
@@ -9,6 +10,8 @@ const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
  */
 let workerSession: string | null = null;
 let running = false;
+
+export const isIngesting = () => running;
 
 const remember = (k: string, v: string) =>
   db.prepare(`INSERT INTO harness_state (key,value,at) VALUES (?,?,?)
@@ -57,6 +60,7 @@ async function processOne(captureId: string) {
     }),
   });
   const raw = await res.text();
+  harvestTurn(raw, "gpt-5.6-terra");
 
   if (!res.ok) {
     // 422 means the session is mid-turn; leave the capture queued and retry next tick.

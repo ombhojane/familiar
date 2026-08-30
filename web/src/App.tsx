@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Familiar, type CreatureState } from "./Familiar";
 import {
   getLoops, getClearance, getOrders, getDossier, getReceipts, getCaptures,
-  LEVELS, runSweep, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture, type Lane,
+  LEVELS, runSweep, resumeLoop, setLoopStatus, getUsage, getActivity, type Usage, type Activity, type Loop, type Clearance, type Order, type Fact, type Receipt, type Capture, type Lane,
 } from "./api";
 import { Gate } from "./Gate";
+import { LoopDrawer } from "./LoopDrawer";
+import { Settings } from "./Settings";
 import { newSession, say, answer, decide, digestRaw, type Pending, type TurnResult } from "./session";
 import "./app.css";
 
@@ -27,6 +29,8 @@ export function App() {
   const dossier = useLive<Fact[]>(getDossier, []);
   const receipts = useLive<Receipt[]>(getReceipts, []);
   const captures = useLive<Capture[]>(getCaptures, []);
+  const usage = useLive<Usage | null>(getUsage as any, null, 4000);
+  const activity = useLive<Activity | null>(getActivity as any, null, 2500);
 
   const [state, setState] = useState<CreatureState>("idle");
   const [pending, setPending] = useState<Pending | null>(null);
@@ -34,6 +38,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
+  const [openLoop, setOpenLoop] = useState<Loop | null>(null);
+  const [view, setView] = useState<"board" | "settings">("board");
   const [sweeping, setSweeping] = useState(false);
   const sid = useRef<string | null>(null);
 
@@ -41,6 +47,15 @@ export function App() {
   const unprocessed = captures.filter((c) => c.status === "unprocessed").length;
 
   const ensure = async () => (sid.current ??= await newSession());
+
+  // When the user is not mid-interaction, the creature reflects what the
+  // server is genuinely doing. It never performs activity it isn't doing.
+  useEffect(() => {
+    if (busy || pending || sweeping) return;
+    if (activity?.state === "sweeping") setState("sweeping");
+    else if (activity?.state === "preparing") setState("preparing");
+    else setState("idle");
+  }, [activity?.state, busy, pending, sweeping]);
 
   const apply = (r: TurnResult) => {
     if (r.said) setSaid(r.said);
@@ -88,19 +103,29 @@ export function App() {
   const onAnswer = (text: string) =>
     run(async () => answer(sid.current!, pending!, text));
 
+  const drawerActions = openLoop && {
+    onClose: () => setOpenLoop(null),
+    onResume: async () => { await resumeLoop(openLoop.id); },
+    onDone: async () => { await setLoopStatus(openLoop.id, "done"); setState("approved"); setOpenLoop(null); },
+    onDismiss: async () => { await setLoopStatus(openLoop.id, "dismissed"); setOpenLoop(null); },
+    onAsk: () => { setOpenLoop(null); send(`Finish the loop "${openLoop.title}" (id ${openLoop.id}). Use what you already prepared; ask me only at the gate.`); },
+  };
+
   const desktop = typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent);
 
   return (
     <div className={desktop ? "shell desktop" : "shell"}>
       {desktop && <div className="titlebar" />}
-      <MissionBoard loops={loops} pending={unprocessed} />
+      <MissionBoard loops={loops} pending={unprocessed} onOpen={setOpenLoop} />
       <Stage
+        view={view} onView={setView}
         state={state} clearance={top} loops={loops} receipts={receipts}
-        said={said} busy={busy} onSend={send}
+        usage={usage} said={said} busy={busy} onSend={send}
         lanes={lanes} sweeping={sweeping} onSweep={sweep}
         onRead={unprocessed > 0 ? () => send("A capture arrived from HOLD. Read it and put it on the mission board.") : null}
       />
       <Knows clearance={clearance} orders={orders} dossier={dossier} />
+      {openLoop && drawerActions && <LoopDrawer loop={openLoop} {...drawerActions} />}
       {pending && (
         <Gate key={pending.toolCallId} pending={pending} onDecide={onDecide} onAnswer={onAnswer} busy={busy} />
       )}
@@ -109,7 +134,8 @@ export function App() {
   );
 }
 
-function MissionBoard({ loops, pending }: { loops: Loop[]; pending: number }) {
+function MissionBoard({ loops, pending, onOpen }: { loops: Loop[]; pending: number; onOpen: (l: Loop) => void }) {
+  const [top, ...rest] = loops;
   return (
     <aside className="rail">
       <header className="rail-head">
@@ -121,12 +147,21 @@ function MissionBoard({ loops, pending }: { loops: Loop[]; pending: number }) {
       )}
       <div className="stack">
         {loops.length === 0 && (
-          <p className="empty">Nothing held yet. Press ⌘⇧Space anywhere to hold your place.</p>
+          <p className="empty">Nothing held yet. Press ⌃⌥⌘H anywhere to hold your place.</p>
         )}
-        {loops.map((l) => {
+        {top && (
+          <div className="upnext" onClick={() => onOpen(top)} role="button" tabIndex={0}
+               onKeyDown={(e) => e.key === "Enter" && onOpen(top)}>
+            <span className="upnext-label">Up next</span>
+            <h3>{top.title}</h3>
+            {top.triage && <p className="muted small">{top.triage.why.join(" · ")}</p>}
+          </div>
+        )}
+        {rest.map((l) => {
           const missing: string[] = JSON.parse(l.missing || "[]");
           return (
-            <article key={l.id} className="loop">
+            <article key={l.id} className="loop clickable" onClick={() => onOpen(l)} role="button" tabIndex={0}
+                     onKeyDown={(e) => e.key === "Enter" && onOpen(l)}>
               <div className="loop-top">
                 <h3>{l.title}</h3>
                 <span className={`chip ${l.status}`}>{l.status}</span>
@@ -152,8 +187,11 @@ function MissionBoard({ loops, pending }: { loops: Loop[]; pending: number }) {
 }
 
 function Stage({
+  view, onView, usage,
   state, clearance, loops, receipts, said, busy, onSend, onRead, lanes, sweeping, onSweep,
 }: {
+  view: "board" | "settings"; onView: (v: "board" | "settings") => void;
+  usage: Usage | null;
   state: CreatureState; clearance: number; loops: Loop[]; receipts: Receipt[];
   said: string; busy: boolean; onSend: (t: string) => void; onRead: (() => void) | null;
   lanes: Lane[] | null; sweeping: boolean; onSweep: () => void;
@@ -163,6 +201,11 @@ function Stage({
 
   return (
     <main className="stage">
+      <nav className="stage-nav">
+        <button className={view === "board" ? "tab on" : "tab"} onClick={() => onView("board")}>Board</button>
+        <button className={view === "settings" ? "tab on" : "tab"} onClick={() => onView("settings")}>Settings</button>
+      </nav>
+      {view === "settings" ? <Settings /> : (<>
       <div className="creature">
         <Familiar state={state} clearance={clearance} size={120} />
         <p className="creature-line">
@@ -177,6 +220,18 @@ function Stage({
           )}
         </div>
       </div>
+
+      {usage && usage.totals.calls > 0 && (
+        <div className="usage-strip">
+          {usage.bySource.map((u) => (
+            <span key={u.source + u.model} className="usage-chip">
+              <b>{u.source}</b> <span className="mono">{u.model.replace("gpt-5.6-", "")}</span>
+              <span className="num"> {(u.i + u.o).toLocaleString()}t</span>
+            </span>
+          ))}
+          <span className="usage-total num">${usage.totals.usd.toFixed(4)}</span>
+        </div>
+      )}
 
       <form
         className="composer"
@@ -225,6 +280,7 @@ function Stage({
           </tbody>
         </table>
       </section>
+      </>)}
     </main>
   );
 }

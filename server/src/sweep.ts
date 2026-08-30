@@ -1,4 +1,5 @@
 import { db } from "./db.js";
+import { harvestTurn } from "./usage.js";
 
 const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
 
@@ -8,9 +9,34 @@ const TF = process.env.TRUEFORGE_BASE_URL ?? "http://localhost:8790";
  * sandbox and tool set but get no conversation history, so each instruction has to
  * be self-contained.
  */
-export async function startSweep(): Promise<{ sessionId: string; loops: number; raw: string }> {
+const MAX_PER_SWEEP = 5;
+
+let sweeping = false;
+export const isSweeping = () => sweeping;
+
+/** Claim the sweep atomically. The scheduler and POST /api/sweep can fire together;
+ *  without this they select the same loops and run duplicate sub-agents over them. */
+function claim(): boolean {
+  if (sweeping) return false;
+  sweeping = true;
+  return true;
+}
+
+export async function startSweep(): Promise<{ sessionId: string; loops: number; raw: string; skipped?: true }> {
+  if (!claim()) return { sessionId: "", loops: 0, raw: "", skipped: true };
+
+  try {
+    return await runSweep();
+  } finally {
+    // Always release. Any throw between here and the tail would otherwise wedge the
+    // flag on forever and block every future sweep.
+    sweeping = false;
+  }
+}
+
+async function runSweep(): Promise<{ sessionId: string; loops: number; raw: string }> {
   const open = db
-    .prepare(`SELECT id, title, summary, missing FROM loops WHERE status IN ('open','sweeping') ORDER BY created_at DESC LIMIT 5`)
+    .prepare(`SELECT id, title, summary, missing FROM loops WHERE status IN ('open','sweeping') ORDER BY created_at DESC LIMIT ${MAX_PER_SWEEP}`)
     .all() as { id: string; title: string; summary: string | null; missing: string }[];
 
   if (open.length === 0) return { sessionId: "", loops: 0, raw: "" };
@@ -47,16 +73,26 @@ and tell it exactly what to do:
   - work out precisely what closing that loop would take
   - do any safe preparation in the sandbox (drafting, filling, assembling)
   - do NOT send, submit, publish, or spend anything
-  - finish by calling loop_upsert with status "prepared" and a sharper list of what is
-    still missing
+  - finish by calling loop_upsert with status "prepared", a sharper list of what is
+    still missing, and — most importantly — put the FULL draft/checklist you produced
+    into preparedNote. The user reads preparedNote verbatim; work not written there
+    is lost.
 
 When they are all back, tell me in one line how many are prepared.`,
       }],
     }),
   });
 
-  db.prepare(`UPDATE loops SET status='sweeping' WHERE status='open'`).run();
+  // Mark only the loops this sweep actually selected. Marking every open loop stranded
+  // the unselected ones in 'sweeping' with nothing working on them.
+  const marked = db.prepare(
+    `UPDATE loops SET status='sweeping' WHERE status='open' AND id IN (${open.map(() => "?").join(",")})`
+  );
+  marked.run(...open.map((l) => l.id));
+
   const raw = await turn.text();
+  harvestTurn(raw, "gpt-5.6-terra");
+  sweeping = false;
   return { sessionId, loops: open.length, raw };
 }
 

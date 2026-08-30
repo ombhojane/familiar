@@ -185,3 +185,71 @@ button, input, textarea, a { -webkit-app-region: no-drag; }
 .lane.done .lane-bar span { width: 100%; background: var(--ok); }
 .lane-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lane-name { font-size: 12px; }
+
+/* ---- loop drawer: the door ---- */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 92vw);
+  background: var(--surface-base); border-left: 1px solid var(--border);
+  box-shadow: -16px 0 48px rgba(0,0,0,.12); z-index: 55;
+  padding: var(--s5); overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--s4);
+  animation: drawer-in 200ms ease-out both;
+}
+@keyframes drawer-in { from { opacity: 0; transform: translateX(24px) } to { opacity: 1; transform: none } }
+.drawer-head { display: flex; justify-content: space-between; gap: var(--s3); align-items: flex-start; }
+.drawer-head h2 { font-size: 17px; }
+.evidence img { max-width: 100%; border: 1px solid var(--border); border-radius: var(--r-sm); }
+.evidence { margin: 0; }
+.drawer-summary { font-size: 13px; color: var(--text-secondary); }
+.drawer-h3 { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-tertiary); margin-bottom: var(--s2); }
+.prepared-note {
+  font-family: var(--mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: var(--s3); margin: 0; max-height: 300px; overflow-y: auto;
+}
+.drawer-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: auto; padding-top: var(--s3);
+  border-top: 1px solid var(--border); }
+.drawer-actions .spacer { flex: 1; }
+
+/* up next: the product decides, the user just goes */
+.upnext {
+  border: 1px solid var(--accent); background: var(--accent-soft);
+  border-radius: var(--r-md); padding: var(--s3); cursor: pointer;
+}
+.upnext-label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+.upnext h3 { font-size: 14px; margin-top: 2px; }
+.score { font-size: 11px; color: var(--text-tertiary); }
+.loop.clickable { cursor: pointer; transition: border-color 120ms ease-out; }
+.loop.clickable:hover { border-color: var(--border-strong); }
+
+.stage-nav { display: flex; gap: var(--s1); }
+.tab { border: 0; background: transparent; color: var(--text-tertiary); padding: var(--s1) var(--s2); font-weight: 500; }
+.tab.on { color: var(--text-primary); border-bottom: 2px solid var(--accent); border-radius: 0; }
+.settings { display: flex; flex-direction: column; gap: var(--s5); max-width: 560px; }
+.kv { display: flex; justify-content: space-between; padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.mode { color: var(--ok); font-size: 13px; }
+.mode.live { color: var(--danger); }
+.conn { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
+.conn-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.dot { width: 8px; height: 8px; border-radius: 999px; background: var(--border-strong); flex: 0 0 auto; }
+.dot.ok { background: var(--ok); }
+
+/* perception vs cognition, and what it cost — TrueFoundry's own scoreboard */
+.usage-strip { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: 11px; }
+.usage-chip { background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 2px var(--s2); color: var(--text-secondary); }
+.usage-chip b { color: var(--text-primary); font-weight: 500; }
+.usage-total { margin-left: auto; color: var(--text-tertiary); }
+
+/* drafts are the deliverable — the thing the person actually takes away */
+.draft { border: 1px solid var(--border); border-radius: var(--r-md); margin-bottom: var(--s3); overflow: hidden; }
+.draft-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  padding: var(--s2) var(--s3); background: var(--surface-raised); border-bottom: 1px solid var(--border); }
+.draft-field { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.draft-head button { font-size: 12px; padding: 3px var(--s2); }
+.draft-body { margin: 0; padding: var(--s3); font-family: var(--font); font-size: 13px;
+  line-height: 1.6; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+.draft-needs { padding: var(--s2) var(--s3); border-top: 1px solid var(--border);
+  background: var(--surface-raised); font-size: 12px; color: var(--text-secondary); }
+.draft-needs span { color: var(--warn); font-weight: 500; }

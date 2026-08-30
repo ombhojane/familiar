@@ -1,9 +1,13 @@
-const { app, globalShortcut, Tray, Menu, BrowserWindow, screen, nativeImage, shell, Notification } = require("electron");
+const { app, globalShortcut, Tray, Menu, BrowserWindow, screen, nativeImage, shell, Notification, ipcMain, safeStorage } = require("electron");
+const { readFileSync: rfs, writeFileSync: wfs } = require("node:fs");
+const services = require("./services.js");
 const { join } = require("node:path");
 const { capture } = require("./capture.js");
 
-const SERVER = process.env.FAMILIAR_SERVER ?? "http://localhost:3333";
-const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? "http://localhost:5173";
+const PACKAGED = app.isPackaged;
+const SERVER = process.env.FAMILIAR_SERVER ?? "http://127.0.0.1:3333";
+// Packaged, the dashboard is served by the bundled server; in dev it is the vite server.
+const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? (PACKAGED ? "http://127.0.0.1:3333/app/" : "http://localhost:5173");
 
 /**
  * Hotkey candidates, most-preferred first.
@@ -86,7 +90,7 @@ function openWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
   win.loadURL(DASHBOARD);
-  win.once("ready-to-show", () => { win.show(); win.focus(); });
+  win.once("ready-to-show", () => { console.log("dashboard window shown"); win.show(); win.focus(); });
   win.on("closed", () => { win = null; });
 }
 
@@ -104,7 +108,50 @@ function buildMenu() {
   ]));
 }
 
-app.whenReady().then(() => {
+/** The key is stored encrypted with the OS keychain when available. */
+const keyPath = () => require("node:path").join(app.getPath("userData"), "key.bin");
+function saveKey(k) {
+  try {
+    const buf = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(k) : Buffer.from(k, "utf8");
+    wfs(keyPath(), buf);
+  } catch {}
+}
+function loadKey() {
+  try {
+    const buf = rfs(keyPath());
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString("utf8");
+  } catch { return null; }
+}
+
+let onboarding = null;
+function openOnboarding() {
+  onboarding = new BrowserWindow({
+    width: 520, height: 520, resizable: false, titleBarStyle: "hiddenInset",
+    backgroundColor: "#FFFFFF", show: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+  onboarding.loadFile(join(__dirname, "onboarding.html"));
+  onboarding.once("ready-to-show", () => { console.log("onboarding window shown"); onboarding.show(); });
+  onboarding.on("closed", () => { onboarding = null; });
+}
+
+async function boot(key) {
+  process.env.FAMILIAR_OPENAI_KEY = key;
+  const status = (t) => onboarding && !onboarding.isDestroyed() && onboarding.webContents.send("familiar:status", t);
+  const out = await services.start(status);
+  if (!out.ok) {
+    onboarding && !onboarding.isDestroyed() && onboarding.webContents.send("familiar:error", out.error);
+    return false;
+  }
+  saveKey(key);
+  if (onboarding && !onboarding.isDestroyed()) onboarding.close();
+  openWindow();
+  return true;
+}
+
+ipcMain.on("familiar:start", (_e, key) => { void boot(key); });
+
+app.whenReady().then(async () => {
   if (process.platform === "darwin") app.dock?.hide();
 
   const icon = nativeImage.createFromPath(join(__dirname, "..", "assets", "trayTemplate.png"));
@@ -120,7 +167,18 @@ app.whenReady().then(() => {
   tray.setToolTip(activeKey ? `Familiar — ${pretty(activeKey)} to hold your place` : "Familiar — no hotkey registered");
   buildMenu();
   tray.on("double-click", openWindow);
-  openWindow();
+
+  if (!PACKAGED) { openWindow(); }              // dev: services already running via dev.sh
+  else {
+    const saved = loadKey();
+    openOnboarding();
+    if (saved) {
+      onboarding.webContents.once("did-finish-load", () => {
+        onboarding.webContents.send("familiar:ready-check");
+        void boot(saved);
+      });
+    }
+  }
 
   if (activeKey) {
     console.log(`HOLD ready.  ${pretty(activeKey)}  (${activeKey})  →  ${SERVER}/capture`);
@@ -134,7 +192,75 @@ app.whenReady().then(() => {
   }
 });
 
+/**
+ * The proactive layer — with a zero-annoyance budget. Exactly two triggers:
+ *   1. a loop BECOMES prepared (work finished on your behalf — worth one ping)
+ *   2. a prepared loop's deadline is within 72h (once per loop, ever)
+ * Never on staleness. Never repeats. The board shows ready, never late.
+ */
+const { app: electronApp } = require("electron");
+const { readFileSync, writeFileSync, mkdirSync } = require("node:fs");
+const { join: pathJoin, dirname: pathDirname } = require("node:path");
+
+// "Once per loop, ever" has to survive a restart. An in-memory Set meant every prepared
+// loop with a near deadline warned again the first time HOLD reopened.
+const STATE_FILE = pathJoin(electronApp.getPath("userData"), "notified.json");
+function loadState() {
+  try { return JSON.parse(readFileSync(STATE_FILE, "utf8")); } catch { return { prepared: [], deadline: [] }; }
+}
+function saveState(s) {
+  try {
+    mkdirSync(pathDirname(STATE_FILE), { recursive: true });
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+  } catch {}
+}
+const persisted = loadState();
+const seenPrepared = new Set(persisted.prepared ?? []);
+const warnedDeadline = new Set(persisted.deadline ?? []);
+const persist = () =>
+  saveState({ prepared: [...seenPrepared], deadline: [...warnedDeadline] });
+
+// Only suppress the very first poll of a fresh install, where everything looks new.
+let firstPoll = seenPrepared.size === 0;
+
+async function pollLoops() {
+  try {
+    const res = await fetch(`${SERVER}/api/loops`);
+    if (!res.ok) return;
+    const loops = await res.json();
+    for (const l of loops) {
+      if (l.status === "prepared" && !seenPrepared.has(l.id)) {
+        seenPrepared.add(l.id);
+        persist();
+        if (!firstPoll) {
+          new Notification({
+            title: "Ready for you",
+            body: `${l.title} — prepared. One tap to finish.`,
+            silent: true,
+          }).on("click", openWindow).show();
+        }
+      }
+      if (l.deadline && l.status === "prepared" && !warnedDeadline.has(l.id)) {
+        const days = (new Date(l.deadline) - Date.now()) / 86400000;
+        if (days >= 0 && days <= 3) {
+          warnedDeadline.add(l.id);
+          persist();
+          new Notification({
+            title: `Due in ${Math.max(1, Math.ceil(days))} day${days > 1 ? "s" : ""}`,
+            body: `${l.title} is prepared and waiting.`,
+            silent: false,
+          }).on("click", openWindow).show();
+        }
+      }
+    }
+    firstPoll = false;
+    persist();
+  } catch {}
+}
+setInterval(pollLoops, 30000);
+pollLoops();
+
 app.on("activate", openWindow);
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("will-quit", () => { globalShortcut.unregisterAll(); services.stop(); });
 // Closing the window must not quit: Familiar keeps listening for the hotkey.
 app.on("window-all-closed", () => {});
