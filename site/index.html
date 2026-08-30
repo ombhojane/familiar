@@ -97,10 +97,10 @@
     writes the answers, and asks before it acts.
   </p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/ombhojane/familiar">Get it on GitHub</a>
-    <a class="btn" href="#run">How to run it</a>
+    <a class="btn p" href="https://github.com/ombhojane/familiar/releases/download/v0.1.0/Familiar-0.1.0-arm64.dmg">Download for macOS</a>
+    <a class="btn" href="https://github.com/ombhojane/familiar">Source on GitHub</a>
   </div>
-  <p class="note" style="margin-top:14px">macOS · open source · your captures never leave your machine except to be read.</p>
+  <p class="note" style="margin-top:14px">Apple silicon · free and open source · your captures stay on your Mac.</p>
 </div>
 
 <section>
@@ -151,14 +151,27 @@
 </section>
 
 <section id="run">
-  <div class="eyebrow">Run it</div>
-  <pre class="run"><span class="c"># macOS · Node 22.14+ · an OpenAI key · gh CLI signed in</span>
-git clone https://github.com/ombhojane/familiar
-cd familiar &amp;&amp; npm install
-cp .env.example .env        <span class="c"># add OPENAI_API_KEY</span>
-./scripts/dev.sh            <span class="c"># harness, server, dashboard, menu-bar app</span></pre>
-  <p class="note" style="margin-top:14px">
-    Every real action is a dry run until you set <code>DEMO_MODE=live</code>. One env var, one code path, no mocks.
+  <div class="eyebrow">Install</div>
+  <div class="steps">
+    <div>
+      <div class="n">01</div>
+      <h3>Open the app</h3>
+      <p>Drag Familiar to Applications. First open, right-click it and choose Open — it is not notarised yet, so macOS asks once.</p>
+    </div>
+    <div>
+      <div class="n">02</div>
+      <h3>Paste an OpenAI key</h3>
+      <p>Familiar asks for it on first run and stores it in your keychain. Roughly $0.0003 per capture.</p>
+    </div>
+    <div>
+      <div class="n">03</div>
+      <h3>Press the keys</h3>
+      <p>It starts everything itself. Grant Screen Recording when macOS asks, then hold your place anywhere.</p>
+    </div>
+  </div>
+  <p class="note" style="margin-top:22px">
+    Needs <a href="https://nodejs.org">Node.js 22+</a>, which Familiar uses to run its local service. Prefer to run from source?
+    <a href="https://github.com/ombhojane/familiar">Clone the repo</a> and run <code>./scripts/dev.sh</code>.
   </p>
 </section>
 

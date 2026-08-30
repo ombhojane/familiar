@@ -1,7 +1,10 @@
 import { config } from "dotenv";
-import { fileURLToPath } from "node:url";
-import { dirname as _dn, resolve as _rs } from "node:path";
-config({ path: _rs(_dn(fileURLToPath(import.meta.url)), "../../.env") });
+import { resolve as _rs } from "node:path";
+// In development the repo .env is authoritative. Inside the packaged app there is no
+// .env: the desktop app passes OPENAI_API_KEY and the data paths through the environment.
+if (!process.env.OPENAI_API_KEY) {
+  config({ path: _rs(process.env.FAMILIAR_ENV ?? "../.env") });
+}
 import express from "express";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -215,6 +218,14 @@ app.get("/api/activity", (_q, r) => {
 });
 
 app.get("/api/usage", (_q, r) => r.json(usageSummary()));
+
+// Packaged, the dashboard is served from here (there is no vite in the .app).
+// WEB_DIST is set by the desktop app; in dev this simply does not exist.
+const webDist = process.env.WEB_DIST;
+if (webDist) {
+  app.use("/app", express.static(webDist));
+  app.get("/app/*splat", (_q, r) => r.sendFile(join(webDist, "index.html")));
+}
 
 app.get("/health", (_q, r) => r.json({ ok: true }));
 

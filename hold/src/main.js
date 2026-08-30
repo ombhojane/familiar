@@ -1,9 +1,13 @@
-const { app, globalShortcut, Tray, Menu, BrowserWindow, screen, nativeImage, shell, Notification } = require("electron");
+const { app, globalShortcut, Tray, Menu, BrowserWindow, screen, nativeImage, shell, Notification, ipcMain, safeStorage } = require("electron");
+const { readFileSync: rfs, writeFileSync: wfs } = require("node:fs");
+const services = require("./services.js");
 const { join } = require("node:path");
 const { capture } = require("./capture.js");
 
-const SERVER = process.env.FAMILIAR_SERVER ?? "http://localhost:3333";
-const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? "http://localhost:5173";
+const PACKAGED = app.isPackaged;
+const SERVER = process.env.FAMILIAR_SERVER ?? "http://127.0.0.1:3333";
+// Packaged, the dashboard is served by the bundled server; in dev it is the vite server.
+const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? (PACKAGED ? "http://127.0.0.1:3333/app" : "http://localhost:5173");
 
 /**
  * Hotkey candidates, most-preferred first.
@@ -86,7 +90,7 @@ function openWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
   win.loadURL(DASHBOARD);
-  win.once("ready-to-show", () => { win.show(); win.focus(); });
+  win.once("ready-to-show", () => { console.log("dashboard window shown"); win.show(); win.focus(); });
   win.on("closed", () => { win = null; });
 }
 
@@ -104,7 +108,50 @@ function buildMenu() {
   ]));
 }
 
-app.whenReady().then(() => {
+/** The key is stored encrypted with the OS keychain when available. */
+const keyPath = () => require("node:path").join(app.getPath("userData"), "key.bin");
+function saveKey(k) {
+  try {
+    const buf = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(k) : Buffer.from(k, "utf8");
+    wfs(keyPath(), buf);
+  } catch {}
+}
+function loadKey() {
+  try {
+    const buf = rfs(keyPath());
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString("utf8");
+  } catch { return null; }
+}
+
+let onboarding = null;
+function openOnboarding() {
+  onboarding = new BrowserWindow({
+    width: 520, height: 520, resizable: false, titleBarStyle: "hiddenInset",
+    backgroundColor: "#FFFFFF", show: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+  onboarding.loadFile(join(__dirname, "onboarding.html"));
+  onboarding.once("ready-to-show", () => { console.log("onboarding window shown"); onboarding.show(); });
+  onboarding.on("closed", () => { onboarding = null; });
+}
+
+async function boot(key) {
+  process.env.FAMILIAR_OPENAI_KEY = key;
+  const status = (t) => onboarding && !onboarding.isDestroyed() && onboarding.webContents.send("familiar:status", t);
+  const out = await services.start(status);
+  if (!out.ok) {
+    onboarding && !onboarding.isDestroyed() && onboarding.webContents.send("familiar:error", out.error);
+    return false;
+  }
+  saveKey(key);
+  if (onboarding && !onboarding.isDestroyed()) onboarding.close();
+  openWindow();
+  return true;
+}
+
+ipcMain.on("familiar:start", (_e, key) => { void boot(key); });
+
+app.whenReady().then(async () => {
   if (process.platform === "darwin") app.dock?.hide();
 
   const icon = nativeImage.createFromPath(join(__dirname, "..", "assets", "trayTemplate.png"));
@@ -120,7 +167,18 @@ app.whenReady().then(() => {
   tray.setToolTip(activeKey ? `Familiar — ${pretty(activeKey)} to hold your place` : "Familiar — no hotkey registered");
   buildMenu();
   tray.on("double-click", openWindow);
-  openWindow();
+
+  if (!PACKAGED) { openWindow(); }              // dev: services already running via dev.sh
+  else {
+    const saved = loadKey();
+    openOnboarding();
+    if (saved) {
+      onboarding.webContents.once("did-finish-load", () => {
+        onboarding.webContents.send("familiar:ready-check");
+        void boot(saved);
+      });
+    }
+  }
 
   if (activeKey) {
     console.log(`HOLD ready.  ${pretty(activeKey)}  (${activeKey})  →  ${SERVER}/capture`);
@@ -203,6 +261,6 @@ setInterval(pollLoops, 30000);
 pollLoops();
 
 app.on("activate", openWindow);
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("will-quit", () => { globalShortcut.unregisterAll(); services.stop(); });
 // Closing the window must not quit: Familiar keeps listening for the hotkey.
 app.on("window-all-closed", () => {});

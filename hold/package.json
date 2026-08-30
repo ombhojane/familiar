@@ -1,9 +1,74 @@
 {
-  "name": "@familiar/hold",
+  "name": "familiar",
   "private": true,
   "version": "0.1.0",
-  "description": "HOLD — one keystroke saves what you were doing, so Familiar can pick it up later.",
+  "description": "Closes the loops you drop.",
   "main": "src/main.js",
-  "scripts": { "dev": "electron .", "start": "electron ." },
-  "devDependencies": { "electron": "^33.0.0" }
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "productName": "Familiar",
+  "build": {
+    "appId": "app.omisaur.familiar",
+    "productName": "Familiar",
+    "directories": {
+      "output": "../dist-app",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "server-bundle/**/*",
+      "web-dist/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "src/main.js"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSAppleEventsUsageDescription": "Familiar reads the frontmost window's title and URL so it knows what you were looking at.",
+        "NSScreenCaptureUsageDescription": "Familiar captures the window you were looking at, only when you press the hotkey."
+      }
+    },
+    "dmg": {
+      "title": "Familiar",
+      "contents": [
+        {
+          "x": 140,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 380,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false
+  },
+  "author": {
+    "name": "Om Bhojane"
+  }
 }

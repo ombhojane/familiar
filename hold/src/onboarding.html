@@ -1,0 +1,61 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+    font:400 14px/1.6 Inter,-apple-system,system-ui,sans-serif;color:#18181B;background:#fff;
+    -webkit-app-region:drag}
+  .card{width:420px;padding:0 36px;-webkit-app-region:no-drag;text-align:center}
+  svg{margin:0 auto 20px;display:block}
+  h1{margin:0 0 8px;font-size:21px;font-weight:600}
+  p{margin:0 0 24px;color:#52525B;font-size:14px}
+  input{width:100%;font:inherit;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+    padding:11px 13px;border:1px solid #E4E4E7;border-radius:6px;background:#fff}
+  input:focus{outline:2px solid #155BD0;outline-offset:2px}
+  button{margin-top:14px;width:100%;font:inherit;font-weight:500;padding:11px;border-radius:6px;
+    border:1px solid #155BD0;background:#155BD0;color:#fff;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .note{margin-top:16px;font-size:12px;color:#71717A}
+  .status{margin-top:20px;font-size:13px;color:#52525B;min-height:20px}
+  .err{color:#B42318}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid #E4E4E7;border-top-color:#155BD0;
+    border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px;margin-right:7px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  a{color:#155BD0}
+</style>
+<div class="card">
+  <svg width="60" height="60" viewBox="0 0 96 96">
+    <ellipse cx="48" cy="54" rx="29" ry="27" fill="#8B7BD8"/>
+    <circle cx="74" cy="24" r="4.5" fill="#B9AEE8"/>
+    <ellipse cx="36" cy="48" rx="7" ry="7" fill="#fff"/><ellipse cx="60" cy="48" rx="7" ry="7" fill="#fff"/>
+    <circle cx="36" cy="48" r="3.4" fill="#141020"/><circle cx="60" cy="48" r="3.4" fill="#141020"/>
+    <rect x="29" y="37" width="14" height="2.6" rx="1.3" fill="#141020"/>
+    <rect x="53" y="37" width="14" height="2.6" rx="1.3" fill="#141020"/>
+  </svg>
+  <div id="setup">
+    <h1>One thing before we start</h1>
+    <p>Familiar reads your screen with a model, so it needs an OpenAI key. It is stored on this Mac and never sent anywhere else.</p>
+    <input id="k" type="password" placeholder="sk-..." autofocus spellcheck="false">
+    <button id="go" disabled>Start Familiar</button>
+    <p class="note">Get one at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a> · about $0.0003 per capture</p>
+  </div>
+  <div class="status" id="s"></div>
+</div>
+<script>
+  const { ipcRenderer } = require("electron");
+  const k = document.getElementById("k"), go = document.getElementById("go"),
+        s = document.getElementById("s"), setup = document.getElementById("setup");
+  k.oninput = () => (go.disabled = !k.value.trim().startsWith("sk-"));
+  k.onkeydown = (e) => { if (e.key === "Enter" && !go.disabled) go.click(); };
+  go.onclick = () => {
+    setup.style.display = "none";
+    s.innerHTML = '<span class="spin"></span>Starting…';
+    ipcRenderer.send("familiar:start", k.value.trim());
+  };
+  ipcRenderer.on("familiar:status", (_e, t) => { s.innerHTML = '<span class="spin"></span>' + t; });
+  ipcRenderer.on("familiar:error", (_e, t) => {
+    s.className = "status err"; s.textContent = t;
+    setup.style.display = ""; go.disabled = false;
+  });
+  ipcRenderer.on("familiar:ready-check", () => { setup.style.display = "none"; });
+</script>
