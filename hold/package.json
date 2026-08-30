@@ -42,28 +42,40 @@
         }
       ],
       "icon": "build/icon.icns",
-      "identity": null,
+      "identity": "-",
       "extendInfo": {
         "LSUIElement": true,
         "NSAppleEventsUsageDescription": "Familiar reads the frontmost window's title and URL so it knows what you were looking at.",
         "NSScreenCaptureUsageDescription": "Familiar captures the window you were looking at, only when you press the hotkey."
-      }
+      },
+      "gatekeeperAssess": false,
+      "hardenedRuntime": false
     },
     "dmg": {
       "title": "Familiar",
       "contents": [
         {
-          "x": 140,
-          "y": 190,
+          "x": 130,
+          "y": 170,
           "type": "file"
         },
         {
-          "x": 380,
-          "y": 190,
+          "x": 390,
+          "y": 170,
           "type": "link",
           "path": "/Applications"
+        },
+        {
+          "x": 260,
+          "y": 310,
+          "type": "file",
+          "path": "dmg-extras/Open Familiar.command"
         }
-      ]
+      ],
+      "window": {
+        "width": 540,
+        "height": 420
+      }
     },
     "npmRebuild": false,
     "buildDependenciesFromSource": false,
