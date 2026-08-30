@@ -6,7 +6,7 @@ if (!process.env.OPENAI_API_KEY) {
   config({ path: _rs(process.env.FAMILIAR_ENV ?? "../.env") });
 }
 import express from "express";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./mcp.js";
@@ -222,9 +222,14 @@ app.get("/api/usage", (_q, r) => r.json(usageSummary()));
 // Packaged, the dashboard is served from here (there is no vite in the .app).
 // WEB_DIST is set by the desktop app; in dev this simply does not exist.
 const webDist = process.env.WEB_DIST;
-if (webDist) {
+if (webDist && existsSync(join(webDist, "index.html"))) {
   app.use("/app", express.static(webDist));
+  // SPA fallback, and /app with no trailing slash.
+  app.get("/app", (_q, r) => r.sendFile(join(webDist, "index.html")));
   app.get("/app/*splat", (_q, r) => r.sendFile(join(webDist, "index.html")));
+  console.log(`dashboard     →  http://${HOST}:${PORT}/app`);
+} else if (webDist) {
+  console.error(`WEB_DIST set but no index.html at ${webDist} — the dashboard will 404`);
 }
 
 app.get("/health", (_q, r) => r.json({ ok: true }));

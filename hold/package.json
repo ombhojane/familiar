@@ -66,7 +66,11 @@
       ]
     },
     "npmRebuild": false,
-    "buildDependenciesFromSource": false
+    "buildDependenciesFromSource": false,
+    "asarUnpack": [
+      "server-bundle/**",
+      "web-dist/**"
+    ]
   },
   "author": {
     "name": "Om Bhojane"

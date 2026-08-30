@@ -12,6 +12,10 @@ const { join } = require("node:path");
 const { existsSync } = require("node:fs");
 const run = promisify(execFile);
 
+/** Files a spawned system node must read cannot live inside app.asar. */
+const unpacked = (p) => p.replace(`${require("node:path").sep}app.asar${require("node:path").sep}`,
+                                  `${require("node:path").sep}app.asar.unpacked${require("node:path").sep}`);
+
 const SERVER_PORT = 3333;
 const TF_PORT = 8790;
 const children = [];
@@ -60,7 +64,7 @@ async function start(onStatus) {
     CAPTURE_DIR: join(app.getPath("userData"), "captures"),
     TRUEFORGE_BASE_URL: `http://127.0.0.1:${TF_PORT}`,
     PORT: String(SERVER_PORT),
-    WEB_DIST: join(__dirname, "..", "web-dist"),
+    WEB_DIST: unpacked(join(__dirname, "..", "web-dist")),
   };
 
   if (!(await alive(TF_PORT))) {
@@ -73,13 +77,19 @@ async function start(onStatus) {
 
   if (!(await alive(SERVER_PORT))) {
     onStatus("Starting Familiar…");
-    const srv = spawn(node, [join(__dirname, "..", "server-bundle", "server.cjs")], { env, stdio: "ignore" });
+    const srv = spawn(node, [unpacked(join(__dirname, "..", "server-bundle", "server.cjs"))], { env, stdio: "ignore" });
     children.push(srv);
     if (!(await waitFor(SERVER_PORT, 60)))
       return { ok: false, error: "Familiar's own service did not start." };
   }
 
   onStatus("Connecting…");
+  // Verify the dashboard really answers. Shipping an app whose window loads
+  // "Cannot GET /app" is worse than failing loudly here.
+  const dash = await fetch(`http://127.0.0.1:${SERVER_PORT}/app/`, { signal: AbortSignal.timeout(4000) })
+    .then((r) => r.ok).catch(() => false);
+  if (!dash) return { ok: false, error: "Familiar started but its dashboard did not load. Please report this." };
+
   return { ok: true };
 }
 

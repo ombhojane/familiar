@@ -7,7 +7,7 @@ const { capture } = require("./capture.js");
 const PACKAGED = app.isPackaged;
 const SERVER = process.env.FAMILIAR_SERVER ?? "http://127.0.0.1:3333";
 // Packaged, the dashboard is served by the bundled server; in dev it is the vite server.
-const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? (PACKAGED ? "http://127.0.0.1:3333/app" : "http://localhost:5173");
+const DASHBOARD = process.env.FAMILIAR_DASHBOARD ?? (PACKAGED ? "http://127.0.0.1:3333/app/" : "http://localhost:5173");
 
 /**
  * Hotkey candidates, most-preferred first.
